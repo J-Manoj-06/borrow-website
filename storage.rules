@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImageFile() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 5 * 1024 * 1024; // 5MB max
+    }
+
+    match /book-covers/{imageId} {
+      allow read: if true; // Public view for mobile app and web
+      allow write: if isSignedIn() && isImageFile();
+    }
+
+    match /announcements/{imageId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isImageFile();
+    }
+
+    match /admin-avatars/{imageId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImageFile();
+    }
+  }
+}

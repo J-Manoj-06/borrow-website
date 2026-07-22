@@ -1,0 +1,19 @@
+{
+  "short_name": "Borrow Admin",
+  "name": "Borrow Library Admin Portal",
+  "description": "Official Admin & Librarian Management System for Borrow Library Platform",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F8FAFC",
+  "theme_color": "#2563EB",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["education", "productivity", "utilities"]
+}
