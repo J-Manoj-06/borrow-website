@@ -7,115 +7,81 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  serverTimestamp,
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebaseConfig';
-import { INITIAL_MOCK_ADMINS } from '../../models/rbacModel';
+import { db } from './firebaseConfig';
+import { logActivityRecord } from './activityService';
 
 const ADMINS_COLLECTION = 'admins';
-const LOCAL_ADMINS_KEY = 'borrow_admin_local_admins';
-
-const getLocalAdmins = () => {
-  const stored = localStorage.getItem(LOCAL_ADMINS_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return INITIAL_MOCK_ADMINS;
-    }
-  }
-  localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(INITIAL_MOCK_ADMINS));
-  return INITIAL_MOCK_ADMINS;
-};
 
 /**
- * Subscribe to Real-Time Admins Snapshot
+  Subscribe to Real-Time Admins Snapshot
  */
 export const subscribeToAdmins = (callback) => {
-  if (isFirebaseConfigured) {
-    try {
-      const q = query(collection(db, ADMINS_COLLECTION), orderBy('fullName', 'asc'));
-      return onSnapshot(
-        q,
-        (snapshot) => {
-          const list = snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          }));
-          callback(list);
-        },
-        (error) => {
-          console.warn('Firestore admin snapshot error, using local fallback:', error);
-          callback(getLocalAdmins());
-        }
-      );
-    } catch (err) {
-      console.warn('Firestore admin subscription failed:', err);
+  const q = query(collection(db, ADMINS_COLLECTION), orderBy('fullName', 'asc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt || new Date().toISOString(),
+      }));
+      callback(list);
+    },
+    (error) => {
+      console.error('Firestore real-time admin subscription error:', error);
+      callback([]);
     }
-  }
-
-  callback(getLocalAdmins());
-  return () => {};
+  );
 };
 
 /**
- * Create New Admin Profile
+  Create New Admin Profile in Firestore
  */
 export const createAdminProfile = async (payload) => {
   const newAdmin = {
     ...payload,
     status: payload.status || 'Active',
     lastLogin: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   };
 
-  if (isFirebaseConfigured) {
-    try {
-      const docRef = await addDoc(collection(db, ADMINS_COLLECTION), newAdmin);
-      return { id: docRef.id, ...newAdmin };
-    } catch (err) {
-      console.warn('Firestore add admin failed, using local fallback:', err);
-    }
-  }
+  const docRef = await addDoc(collection(db, ADMINS_COLLECTION), newAdmin);
 
-  const current = getLocalAdmins();
-  const created = { id: `ADM-${Date.now()}`, ...newAdmin };
-  const updated = [created, ...current];
-  localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(updated));
-  return created;
+  await logActivityRecord({
+    user: 'System Admin',
+    action: 'created admin account for',
+    target: payload.fullName || payload.email,
+    type: 'add',
+  });
+
+  return { id: docRef.id, ...newAdmin };
 };
 
 /**
- * Update Admin Profile
+  Update Admin Profile in Firestore
  */
 export const updateAdminRecord = async (id, payload) => {
-  if (isFirebaseConfigured) {
-    try {
-      await updateDoc(doc(db, ADMINS_COLLECTION, id), payload);
-    } catch (err) {
-      console.warn('Firestore update admin failed:', err);
-    }
-  }
-
-  const current = getLocalAdmins();
-  const updated = current.map((a) => (a.id === id ? { ...a, ...payload } : a));
-  localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(updated));
-  return updated;
+  const adminRef = doc(db, ADMINS_COLLECTION, id);
+  await updateDoc(adminRef, {
+    ...payload,
+    updatedAt: serverTimestamp(),
+  });
+  return true;
 };
 
 /**
- * Delete Admin Profile
+  Delete Admin Profile from Firestore
  */
 export const deleteAdminRecord = async (id) => {
-  if (isFirebaseConfigured) {
-    try {
-      await deleteDoc(doc(db, ADMINS_COLLECTION, id));
-    } catch (err) {
-      console.warn('Firestore delete admin failed:', err);
-    }
-  }
-
-  const current = getLocalAdmins();
-  const updated = current.filter((a) => a.id !== id);
-  localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(updated));
+  await deleteDoc(doc(db, ADMINS_COLLECTION, id));
+  await logActivityRecord({
+    user: 'System Admin',
+    action: 'revoked admin account',
+    target: id,
+    type: 'delete',
+  });
   return true;
 };

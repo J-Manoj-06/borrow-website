@@ -1,10 +1,10 @@
 import {
   doc,
-  getDoc,
   setDoc,
   onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebaseConfig';
+import { db } from './firebaseConfig';
 import {
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_BORROW_RULES,
@@ -16,7 +16,6 @@ import {
 } from '../../models/settingsModel';
 
 const SETTINGS_DOC_PATH = 'settings/globalConfig';
-const LOCAL_SETTINGS_KEY = 'borrow_admin_local_settings_config';
 
 const getInitialCombinedSettings = () => ({
   general: DEFAULT_GENERAL_SETTINGS,
@@ -28,81 +27,50 @@ const getInitialCombinedSettings = () => ({
   academicYears: DEFAULT_ACADEMIC_YEARS,
 });
 
-const getLocalSettings = () => {
-  const stored = localStorage.getItem(LOCAL_SETTINGS_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return getInitialCombinedSettings();
-    }
-  }
-  const initial = getInitialCombinedSettings();
-  localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(initial));
-  return initial;
-};
-
 /**
- * Subscribe to Real-Time Settings Snapshot
+  Subscribe to Real-Time Settings Snapshot from Firestore
  */
 export const subscribeToSettings = (callback) => {
-  if (isFirebaseConfigured) {
-    try {
-      const docRef = doc(db, SETTINGS_DOC_PATH);
-      return onSnapshot(
-        docRef,
-        (docSnap) => {
-          if (docSnap.exists()) {
-            callback(docSnap.data());
-          } else {
-            const initial = getInitialCombinedSettings();
-            setDoc(docRef, initial).catch(console.warn);
-            callback(initial);
-          }
-        },
-        (error) => {
-          console.warn('Firestore settings snapshot error, using local fallback:', error);
-          callback(getLocalSettings());
-        }
-      );
-    } catch (err) {
-      console.warn('Firestore settings subscription failed:', err);
+  const docRef = doc(db, SETTINGS_DOC_PATH);
+  return onSnapshot(
+    docRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data());
+      } else {
+        const initial = getInitialCombinedSettings();
+        setDoc(docRef, initial).catch(console.warn);
+        callback(initial);
+      }
+    },
+    (error) => {
+      console.error('Firestore settings real-time subscription error:', error);
+      callback(getInitialCombinedSettings());
     }
-  }
-
-  callback(getLocalSettings());
-  return () => {};
+  );
 };
 
 /**
- * Save Specific Settings Section
+  Save Specific Settings Section in Firestore
  */
 export const updateSettingsSection = async (sectionKey, newSectionData) => {
-  const current = getLocalSettings();
-  const updatedAll = {
-    ...current,
-    [sectionKey]: newSectionData,
-    updatedAt: new Date().toISOString(),
-  };
-
-  if (isFirebaseConfigured) {
-    try {
-      const docRef = doc(db, SETTINGS_DOC_PATH);
-      await setDoc(docRef, updatedAll, { merge: true });
-    } catch (err) {
-      console.warn('Firestore update settings section failed:', err);
-    }
-  }
-
-  localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(updatedAll));
-  return updatedAll;
+  const docRef = doc(db, SETTINGS_DOC_PATH);
+  await setDoc(
+    docRef,
+    {
+      [sectionKey]: newSectionData,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return true;
 };
 
 /**
- * Export Complete Configuration JSON
+  Export Complete Configuration JSON
  */
-export const exportSettingsJSON = () => {
-  const data = getLocalSettings();
+export const exportSettingsJSON = (currentSettings) => {
+  const data = currentSettings || getInitialCombinedSettings();
   const jsonStr = JSON.stringify(data, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -116,16 +84,13 @@ export const exportSettingsJSON = () => {
 };
 
 /**
- * Import Settings JSON
+  Import Settings JSON to Firestore
  */
 export const importSettingsJSON = async (jsonString) => {
   try {
     const parsed = JSON.parse(jsonString);
-    if (isFirebaseConfigured) {
-      const docRef = doc(db, SETTINGS_DOC_PATH);
-      await setDoc(docRef, parsed, { merge: true });
-    }
-    localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(parsed));
+    const docRef = doc(db, SETTINGS_DOC_PATH);
+    await setDoc(docRef, { ...parsed, updatedAt: serverTimestamp() }, { merge: true });
     return parsed;
   } catch (err) {
     throw new Error('Invalid JSON settings backup file formatting.');
@@ -133,18 +98,11 @@ export const importSettingsJSON = async (jsonString) => {
 };
 
 /**
- * Reset Settings to Factory Defaults
+  Reset Settings to Factory Defaults in Firestore
  */
 export const resetSettingsToDefault = async () => {
   const initial = getInitialCombinedSettings();
-  if (isFirebaseConfigured) {
-    try {
-      const docRef = doc(db, SETTINGS_DOC_PATH);
-      await setDoc(docRef, initial);
-    } catch (err) {
-      console.warn('Firestore reset settings failed:', err);
-    }
-  }
-  localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(initial));
+  const docRef = doc(db, SETTINGS_DOC_PATH);
+  await setDoc(docRef, { ...initial, updatedAt: serverTimestamp() });
   return initial;
 };

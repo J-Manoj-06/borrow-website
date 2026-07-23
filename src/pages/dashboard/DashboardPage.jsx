@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Grid from '@mui/material/Grid';
 import Box from '@mui/material/Box';
@@ -10,15 +10,19 @@ import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import SwapHorizontalCircleOutlinedIcon from '@mui/icons-material/SwapHorizontalCircleOutlined';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import AssignmentReturnOutlinedIcon from '@mui/icons-material/AssignmentReturnOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
-import AddBookIcon from '@mui/icons-material/BookmarkAddOutlined';
-import IssueBookIcon from '@mui/icons-material/MenuBookOutlined';
-import ReturnBookIcon from '@mui/icons-material/AssignmentReturnedOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
+import BookmarkAddOutlinedIcon from '@mui/icons-material/BookmarkAddOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import AssignmentReturnedOutlinedIcon from '@mui/icons-material/AssignmentReturnedOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
@@ -34,151 +38,119 @@ import CustomTable, { StatusChip } from '../../components/common/CustomTable';
 import CustomDialog from '../../components/common/CustomDialog';
 import { ROUTES } from '../../constants/routes';
 
-// Mock Data for Dashboard Preview
-const initialRequests = [
-  {
-    id: 'REQ-1048',
-    bookTitle: 'Clean Code: Handbook of Software Craftsmanship',
-    studentName: 'Alex Rivera',
-    studentId: 'ST-2024-88',
-    requestDate: 'Today, 10:45 AM',
-    status: 'Pending',
-    coverBg: '#2563EB',
-  },
-  {
-    id: 'REQ-1047',
-    bookTitle: 'Design Patterns: Elements of Reusable Object-Oriented Software',
-    studentName: 'Sophia Chen',
-    studentId: 'ST-2024-42',
-    requestDate: 'Today, 09:15 AM',
-    status: 'Pending',
-    coverBg: '#3B82F6',
-  },
-  {
-    id: 'REQ-1046',
-    bookTitle: 'Introduction to Algorithms (4th Edition)',
-    studentName: 'Marcus Vance',
-    studentId: 'ST-2023-19',
-    requestDate: 'Yesterday, 04:30 PM',
-    status: 'Approved',
-    coverBg: '#22C55E',
-  },
-  {
-    id: 'REQ-1045',
-    bookTitle: 'Artificial Intelligence: A Modern Approach',
-    studentName: 'Emily Watson',
-    studentId: 'ST-2024-05',
-    requestDate: 'Yesterday, 02:10 PM',
-    status: 'Returned',
-    coverBg: '#F59E0B',
-  },
-  {
-    id: 'REQ-1044',
-    bookTitle: 'System Design Interview – An Insider\'s Guide',
-    studentName: 'David Kalu',
-    studentId: 'ST-2023-99',
-    requestDate: '22 Jul, 11:20 AM',
-    status: 'Pending',
-    coverBg: '#8B5CF6',
-  },
-];
-
-const mockActivities = [
-  {
-    id: 1,
-    user: 'Sophia Chen',
-    action: 'submitted borrow request for',
-    target: 'Design Patterns',
-    time: '15 mins ago',
-    type: 'request',
-  },
-  {
-    id: 2,
-    user: 'Librarian Sarah',
-    action: 'approved book return for',
-    target: 'Artificial Intelligence',
-    time: '1 hour ago',
-    type: 'return',
-  },
-  {
-    id: 3,
-    user: 'Marcus Vance',
-    action: 'checked out book',
-    target: 'Introduction to Algorithms',
-    time: '2 hours ago',
-    type: 'issue',
-  },
-  {
-    id: 4,
-    user: 'System Admin',
-    action: 'added 5 new copies of',
-    target: 'Flutter Mobile Dev',
-    time: '4 hours ago',
-    type: 'add',
-  },
-];
+import useBooks from '../../hooks/useBooks';
+import useBorrowRequests from '../../hooks/useBorrowRequests';
+import useTransactions from '../../hooks/useTransactions';
+import useStudents from '../../hooks/useStudents';
+import useActivity from '../../hooks/useActivity';
+import { computeExecutiveHealthMetrics } from '../../services/firebase/reportService';
 
 export const DashboardPage = () => {
   const navigate = useNavigate();
 
-  const [requests, setRequests] = useState(initialRequests);
+  const { books, stats: bookStats, addBook } = useBooks();
+  const { requests, approveRequest, rejectRequest } = useBorrowRequests();
+  const { transactions, issueBook, returnBook } = useTransactions();
+  const { students } = useStudents();
+  const { activities } = useActivity();
+
   const [addBookOpen, setAddBookOpen] = useState(false);
   const [issueBookOpen, setIssueBookOpen] = useState(false);
   const [returnBookOpen, setReturnBookOpen] = useState(false);
 
-  // Quick Action Modal Form States
+  // Form States
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookIsbn, setNewBookIsbn] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
+  const [newBookCategory, setNewBookCategory] = useState('Computer Science');
   const [issueStudentId, setIssueStudentId] = useState('');
   const [issueBookId, setIssueBookId] = useState('');
-  const [returnBorrowId, setReturnBorrowId] = useState('');
+  const [returnTransactionId, setReturnTransactionId] = useState('');
 
-  const handleApproveRequest = (id) => {
-    setRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'Approved' } : r))
-    );
-    toast.success(`Borrow request ${id} approved successfully!`);
+  // Executive Health Metrics & System Alerts Calculation
+  const healthMetrics = useMemo(() => {
+    return computeExecutiveHealthMetrics(books, transactions, requests, students);
+  }, [books, transactions, requests, students]);
+
+  const handleApproveRequest = async (id) => {
+    try {
+      await approveRequest(id, 14);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleRejectRequest = (id) => {
-    setRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'Rejected' } : r))
-    );
-    toast.error(`Borrow request ${id} rejected.`);
+  const handleRejectRequest = async (id) => {
+    try {
+      await rejectRequest(id, 'Rejected by Librarian');
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleCreateBookSubmit = () => {
-    if (!newBookTitle) {
-      toast.error('Please enter a book title');
+  const handleCreateBookSubmit = async () => {
+    if (!newBookTitle || !newBookIsbn) {
+      toast.error('Please fill in book title and ISBN');
       return;
     }
-    toast.success(`"${newBookTitle}" added to library inventory!`);
-    setNewBookTitle('');
-    setNewBookIsbn('');
-    setNewBookAuthor('');
-    setAddBookOpen(false);
+    try {
+      await addBook({
+        title: newBookTitle,
+        isbn: newBookIsbn,
+        author: newBookAuthor || 'Unknown Author',
+        category: newBookCategory,
+        totalCopies: 1,
+      });
+      setNewBookTitle('');
+      setNewBookIsbn('');
+      setNewBookAuthor('');
+      setAddBookOpen(false);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleIssueBookSubmit = () => {
+  const handleIssueBookSubmit = async () => {
     if (!issueStudentId || !issueBookId) {
-      toast.error('Please fill in student ID and book ID');
+      toast.error('Please enter student register number and book ID');
       return;
     }
-    toast.success(`Book ${issueBookId} issued to Student ${issueStudentId}!`);
-    setIssueStudentId('');
-    setIssueBookId('');
-    setIssueBookOpen(false);
+    try {
+      const student = students.find(
+        (s) =>
+          (s.registerNumber || '').toLowerCase() === issueStudentId.trim().toLowerCase() ||
+          (s.id || '').toLowerCase() === issueStudentId.trim().toLowerCase()
+      );
+
+      await issueBook({
+        studentId: student?.id || issueStudentId,
+        studentName: student?.fullName || `Student (${issueStudentId})`,
+        registerNumber: student?.registerNumber || issueStudentId,
+        department: student?.department || 'Computer Science',
+        bookId: issueBookId,
+        bookTitle: 'Library Collection Book',
+      });
+
+      setIssueStudentId('');
+      setIssueBookId('');
+      setIssueBookOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to issue book');
+    }
   };
 
-  const handleReturnBookSubmit = () => {
-    if (!returnBorrowId) {
-      toast.error('Please enter Borrow ID');
+  const handleReturnBookSubmit = async () => {
+    if (!returnTransactionId) {
+      toast.error('Please enter transaction ID');
       return;
     }
-    toast.success(`Book return logged for Borrow ID ${returnBorrowId}!`);
-    setReturnBorrowId('');
-    setReturnBookOpen(false);
+    try {
+      await returnBook(returnTransactionId.trim(), 'Good', 'Returned via quick action');
+      setReturnTransactionId('');
+      setReturnBookOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to return book');
+    }
   };
 
   // Table Columns Setup
@@ -194,7 +166,7 @@ export const DashboardPage = () => {
               width: 36,
               height: 48,
               borderRadius: '6px',
-              backgroundColor: row.coverBg,
+              backgroundColor: BORROW_COLORS.primary,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -202,16 +174,21 @@ export const DashboardPage = () => {
               fontWeight: 800,
               fontSize: '0.75rem',
               boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              overflow: 'hidden',
             }}
           >
-            BOOK
+            {row.bookCoverUrl ? (
+              <img src={row.bookCoverUrl} alt={val} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              'BOOK'
+            )}
           </Box>
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
-              {val}
+              {val || row.title}
             </Typography>
             <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-              ID: {row.id}
+              ID: {row.requestId || row.id}
             </Typography>
           </Box>
         </Box>
@@ -227,7 +204,7 @@ export const DashboardPage = () => {
             {val}
           </Typography>
           <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-            {row.studentId}
+            {row.registerNumber || row.studentId}
           </Typography>
         </Box>
       ),
@@ -236,6 +213,7 @@ export const DashboardPage = () => {
       id: 'requestDate',
       label: 'Date & Time',
       minWidth: 140,
+      format: (val) => (val ? new Date(val).toLocaleDateString() : 'N/A'),
     },
     {
       id: 'status',
@@ -248,7 +226,7 @@ export const DashboardPage = () => {
       label: 'Actions',
       minWidth: 120,
       align: 'right',
-      format: (_, row) => (
+      format: (_, row) =>
         row.status === 'Pending' ? (
           <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
             <Tooltip title="Approve Request">
@@ -282,46 +260,57 @@ export const DashboardPage = () => {
           <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 600 }}>
             Processed
           </Typography>
-        )
-      ),
+        ),
     },
   ];
 
   return (
     <PageContainer
-      title="Dashboard Overview"
-      subtitle="Live metrics, borrow request approvals, and inventory status."
+      title="Executive Dashboard"
+      subtitle="Real-time operational metrics, circulation health alerts, and instant quick actions."
     >
-      {/* 1. Metric Statistics Grid */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={4} lg={2}>
+      {/* 1. Real-Time System Alerts Banner if warnings exist */}
+      {healthMetrics.alerts && healthMetrics.alerts.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          {healthMetrics.alerts.map((alert) => (
+            <Alert key={alert.id} severity={alert.type} sx={{ mb: 1, borderRadius: '12px', fontWeight: 600 }}>
+              <AlertTitle sx={{ fontWeight: 800 }}>Real-Time System Notification</AlertTitle>
+              {alert.message}
+            </Alert>
+          ))}
+        </Box>
+      )}
+
+      {/* 2. Executive Metric Statistics Grid (12 Cards) */}
+      <Grid container spacing={2.5} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3} lg={2}>
           <DashboardCard
             title="Total Books"
-            value="1,482"
-            trend="+12%"
-            subtitle="vs last month"
+            value={healthMetrics.totalTitles.toLocaleString()}
+            subtitle="catalog titles"
             icon={MenuBookIcon}
             iconBgColor="rgba(37, 99, 235, 0.1)"
             iconColor={BORROW_COLORS.primary}
             onClick={() => navigate(ROUTES.BOOKS)}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4} lg={2}>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
           <DashboardCard
             title="Available"
-            value="1,120"
-            subtitle="75.5% in shelf"
+            value={healthMetrics.availableCopies.toLocaleString()}
+            subtitle="copies on shelf"
             icon={CheckCircleOutlineIcon}
             iconBgColor={BORROW_COLORS.successLight}
             iconColor={BORROW_COLORS.success}
             onClick={() => navigate(ROUTES.BOOKS)}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4} lg={2}>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
           <DashboardCard
             title="Borrowed"
-            value="362"
-            trend="+5%"
+            value={healthMetrics.borrowedCopies.toLocaleString()}
             subtitle="active loans"
             icon={SwapHorizontalCircleOutlinedIcon}
             iconBgColor={BORROW_COLORS.warningLight}
@@ -329,34 +318,95 @@ export const DashboardPage = () => {
             onClick={() => navigate(ROUTES.REQUESTS)}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4} lg={2}>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
           <DashboardCard
-            title="Pending"
-            value="18"
-            trend="Action req."
-            trendIsPositive={false}
+            title="Overdue"
+            value={healthMetrics.overdueCount.toLocaleString()}
+            subtitle="past due date"
+            icon={WarningAmberIcon}
+            iconBgColor={BORROW_COLORS.errorLight}
+            iconColor={BORROW_COLORS.error}
+            onClick={() => navigate(ROUTES.RETURNS)}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
+          <DashboardCard
+            title="Pending Req."
+            value={healthMetrics.pendingRequests.toLocaleString()}
+            subtitle="action required"
             icon={PendingActionsIcon}
             iconBgColor="rgba(245, 158, 11, 0.15)"
             iconColor={BORROW_COLORS.warning}
             onClick={() => navigate(ROUTES.REQUESTS)}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4} lg={2}>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
           <DashboardCard
             title="Returned Today"
-            value="24"
-            subtitle="processed"
+            value={healthMetrics.todayReturns.toLocaleString()}
+            subtitle="checked in"
             icon={AssignmentReturnOutlinedIcon}
             iconBgColor={BORROW_COLORS.infoLight}
             iconColor={BORROW_COLORS.info}
             onClick={() => navigate(ROUTES.RETURNS)}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4} lg={2}>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
           <DashboardCard
-            title="Students"
-            value="850"
-            trend="+28 new"
+            title="Today's Issues"
+            value={healthMetrics.todayIssues.toLocaleString()}
+            subtitle="checked out"
+            icon={MenuBookOutlinedIcon}
+            iconBgColor="rgba(37, 99, 235, 0.1)"
+            iconColor={BORROW_COLORS.primary}
+            onClick={() => navigate(ROUTES.RETURNS)}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
+          <DashboardCard
+            title="Damaged"
+            value={healthMetrics.damagedCopies.toLocaleString()}
+            subtitle="needs repair"
+            icon={ReportProblemIcon}
+            iconBgColor={BORROW_COLORS.warningLight}
+            iconColor={BORROW_COLORS.warning}
+            onClick={() => navigate(ROUTES.BOOKS)}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
+          <DashboardCard
+            title="Lost Copies"
+            value={healthMetrics.lostCopies.toLocaleString()}
+            subtitle="unreturned"
+            icon={ReportProblemIcon}
+            iconBgColor={BORROW_COLORS.errorLight}
+            iconColor={BORROW_COLORS.error}
+            onClick={() => navigate(ROUTES.BOOKS)}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
+          <DashboardCard
+            title="Expired Res."
+            value={healthMetrics.expiredReservations.toLocaleString()}
+            subtitle="uncollected"
+            icon={PendingActionsIcon}
+            iconBgColor="rgba(100, 116, 139, 0.1)"
+            iconColor="#64748B"
+            onClick={() => navigate(ROUTES.REQUESTS)}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
+          <DashboardCard
+            title="Active Students"
+            value={healthMetrics.totalStudents.toLocaleString()}
             subtitle="registered"
             icon={PeopleOutlineIcon}
             iconBgColor="rgba(139, 92, 246, 0.1)"
@@ -364,9 +414,21 @@ export const DashboardPage = () => {
             onClick={() => navigate(ROUTES.STUDENTS)}
           />
         </Grid>
+
+        <Grid item xs={12} sm={6} md={3} lg={2}>
+          <DashboardCard
+            title="System Health"
+            value={healthMetrics.systemStatus}
+            subtitle="operational status"
+            icon={CheckCircleOutlineIcon}
+            iconBgColor={healthMetrics.systemStatus === 'Healthy' ? BORROW_COLORS.successLight : BORROW_COLORS.warningLight}
+            iconColor={healthMetrics.systemStatus === 'Healthy' ? BORROW_COLORS.success : BORROW_COLORS.warning}
+            onClick={() => navigate(ROUTES.REPORTS)}
+          />
+        </Grid>
       </Grid>
 
-      {/* 2. Quick Actions Banner */}
+      {/* 3. Quick Actions Banner */}
       <Card
         sx={{
           mb: 4,
@@ -376,7 +438,15 @@ export const DashboardPage = () => {
         }}
       >
         <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', gap: 2 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              alignItems: { xs: 'flex-start', md: 'center' },
+              justifyContent: 'space-between',
+              gap: 2,
+            }}
+          >
             <Box>
               <Typography variant="h4" sx={{ fontWeight: 800, color: '#FFFFFF', mb: 0.5 }}>
                 Quick Librarian Actions
@@ -389,7 +459,7 @@ export const DashboardPage = () => {
             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
               <CustomButton
                 variant="contained"
-                startIcon={<AddBookIcon />}
+                startIcon={<BookmarkAddOutlinedIcon />}
                 onClick={() => setAddBookOpen(true)}
                 sx={{ background: BORROW_COLORS.primaryGradient }}
               >
@@ -398,7 +468,7 @@ export const DashboardPage = () => {
 
               <CustomButton
                 variant="outlined"
-                startIcon={<IssueBookIcon />}
+                startIcon={<MenuBookOutlinedIcon />}
                 onClick={() => setIssueBookOpen(true)}
                 sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', '&:hover': { borderColor: '#FFFFFF' } }}
               >
@@ -407,7 +477,7 @@ export const DashboardPage = () => {
 
               <CustomButton
                 variant="outlined"
-                startIcon={<ReturnBookIcon />}
+                startIcon={<AssignmentReturnedOutlinedIcon />}
                 onClick={() => setReturnBookOpen(true)}
                 sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', '&:hover': { borderColor: '#FFFFFF' } }}
               >
@@ -418,7 +488,7 @@ export const DashboardPage = () => {
         </CardContent>
       </Card>
 
-      {/* 3. Main Data Sections Grid */}
+      {/* 4. Main Data Sections Grid */}
       <Grid container spacing={3}>
         {/* Left Column: Recent Borrow Requests Table */}
         <Grid item xs={12} lg={8}>
@@ -454,51 +524,57 @@ export const DashboardPage = () => {
           <Card sx={{ height: 'calc(100% - 48px)' }}>
             <CardContent sx={{ p: 2.5 }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                {mockActivities.map((act) => (
-                  <motion.div
-                    key={act.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                      <Avatar
-                        sx={{
-                          width: 36,
-                          height: 36,
-                          fontSize: '0.85rem',
-                          fontWeight: 700,
-                          backgroundColor:
-                            act.type === 'request'
-                              ? 'rgba(37, 99, 235, 0.1)'
-                              : act.type === 'return'
-                              ? BORROW_COLORS.successLight
-                              : BORROW_COLORS.infoLight,
-                          color:
-                            act.type === 'request'
-                              ? BORROW_COLORS.primary
-                              : act.type === 'return'
-                              ? BORROW_COLORS.success
-                              : BORROW_COLORS.info,
-                        }}
-                      >
-                        {act.user[0]}
-                      </Avatar>
+                {activities.length > 0 ? (
+                  activities.slice(0, 6).map((act) => (
+                    <motion.div
+                      key={act.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                        <Avatar
+                          sx={{
+                            width: 36,
+                            height: 36,
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            backgroundColor:
+                              act.type === 'request'
+                                ? 'rgba(37, 99, 235, 0.1)'
+                                : act.type === 'return'
+                                ? BORROW_COLORS.successLight
+                                : BORROW_COLORS.infoLight,
+                            color:
+                              act.type === 'request'
+                                ? BORROW_COLORS.primary
+                                : act.type === 'return'
+                                ? BORROW_COLORS.success
+                                : BORROW_COLORS.info,
+                          }}
+                        >
+                          {(act.user || act.performedBy || 'A')[0]}
+                        </Avatar>
 
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="body2" sx={{ color: BORROW_COLORS.textPrimary, lineHeight: 1.4 }}>
-                          <strong>{act.user}</strong> {act.action}{' '}
-                          <span style={{ color: BORROW_COLORS.primary, fontWeight: 600 }}>
-                            "{act.target}"
-                          </span>
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, mt: 0.25, display: 'block' }}>
-                          {act.time}
-                        </Typography>
+                        <Box sx={{ flexGrow: 1 }}>
+                          <Typography variant="body2" sx={{ color: BORROW_COLORS.textPrimary, lineHeight: 1.4 }}>
+                            <strong>{act.user || act.performedBy || 'System Admin'}</strong> {act.action || act.activityType}{' '}
+                            <span style={{ color: BORROW_COLORS.primary, fontWeight: 600 }}>
+                              "{act.target || act.affectedDocumentName || ''}"
+                            </span>
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, mt: 0.25, display: 'block' }}>
+                            {act.time || 'Just now'}
+                          </Typography>
+                        </Box>
                       </Box>
-                    </Box>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  ))
+                ) : (
+                  <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, textAlign: 'center', py: 4 }}>
+                    No recent activities recorded.
+                  </Typography>
+                )}
               </Box>
             </CardContent>
           </Card>
@@ -543,12 +619,19 @@ export const DashboardPage = () => {
               <TextField
                 label="ISBN"
                 fullWidth
+                required
                 value={newBookIsbn}
                 onChange={(e) => setNewBookIsbn(e.target.value)}
               />
             </Grid>
             <Grid item xs={6}>
-              <TextField label="Category" select fullWidth defaultValue="Computer Science">
+              <TextField
+                label="Category"
+                select
+                fullWidth
+                value={newBookCategory}
+                onChange={(e) => setNewBookCategory(e.target.value)}
+              >
                 <MenuItem value="Computer Science">Computer Science</MenuItem>
                 <MenuItem value="Mathematics">Mathematics</MenuItem>
                 <MenuItem value="Fiction">Fiction</MenuItem>
@@ -578,7 +661,7 @@ export const DashboardPage = () => {
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           <TextField
-            label="Student ID"
+            label="Student ID / Register No"
             placeholder="ST-2024-001"
             fullWidth
             required
@@ -586,8 +669,8 @@ export const DashboardPage = () => {
             onChange={(e) => setIssueStudentId(e.target.value)}
           />
           <TextField
-            label="Book Barcode / ID"
-            placeholder="BK-9942"
+            label="Book Document ID"
+            placeholder="Document ID from Firestore Books"
             fullWidth
             required
             value={issueBookId}
@@ -615,12 +698,12 @@ export const DashboardPage = () => {
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           <TextField
-            label="Borrow Transaction ID"
-            placeholder="REQ-1048"
+            label="Borrow Transaction Document ID"
+            placeholder="Firestore Transaction Document ID"
             fullWidth
             required
-            value={returnBorrowId}
-            onChange={(e) => setReturnBorrowId(e.target.value)}
+            value={returnTransactionId}
+            onChange={(e) => setReturnTransactionId(e.target.value)}
           />
         </Box>
       </CustomDialog>

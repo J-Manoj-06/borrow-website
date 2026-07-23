@@ -39,8 +39,8 @@ export const LoginPage = () => {
     formState: { errors },
   } = useForm({
     defaultValues: {
-      email: 'admin@borrow.com',
-      password: 'admin123',
+      email: '',
+      password: '',
     },
   });
 
@@ -302,22 +302,19 @@ export const LoginPage = () => {
                   Sign In to Portal
                 </CustomButton>
 
-                {/* Quick Dev Info Box */}
+                {/* Production Auth Notice Box */}
                 <Box
                   sx={{
                     mt: 4,
                     p: 2,
                     borderRadius: '12px',
                     backgroundColor: '#F1F5F9',
-                    border: `1px dashed ${BORROW_COLORS.border}`,
+                    border: `1px solid ${BORROW_COLORS.border}`,
                     textAlign: 'center',
                   }}
                 >
-                  <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
-                    <strong>Default Demo Credentials:</strong>
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 700 }}>
-                    admin@borrow.com &nbsp;|&nbsp; admin123
+                  <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block', fontWeight: 600 }}>
+                    Enterprise Security Active • Powered by Firebase Authentication
                   </Typography>
                 </Box>
               </form>

@@ -4,80 +4,66 @@ import {
   orderBy,
   onSnapshot,
   addDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebaseConfig';
-import { INITIAL_MOCK_ACTIVITIES } from '../../models/activityModel';
+import { db } from './firebaseConfig';
 
 const ACTIVITIES_COLLECTION = 'activityLogs';
-const LOCAL_ACTIVITIES_KEY = 'borrow_admin_local_activities';
-
-const getLocalActivities = () => {
-  const stored = localStorage.getItem(LOCAL_ACTIVITIES_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return INITIAL_MOCK_ACTIVITIES;
-    }
-  }
-  localStorage.setItem(LOCAL_ACTIVITIES_KEY, JSON.stringify(INITIAL_MOCK_ACTIVITIES));
-  return INITIAL_MOCK_ACTIVITIES;
-};
 
 /**
- * Subscribe to Real-Time Activity Logs Snapshot
+  Subscribe to Real-Time Activity Logs Snapshot
  */
 export const subscribeToActivityLogs = (callback) => {
-  if (isFirebaseConfigured) {
-    try {
-      const q = query(collection(db, ACTIVITIES_COLLECTION), orderBy('createdAt', 'desc'));
-      return onSnapshot(
-        q,
-        (snapshot) => {
-          const list = snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          }));
-          callback(list);
-        },
-        (error) => {
-          console.warn('Firestore activity log snapshot error, using local fallback:', error);
-          callback(getLocalActivities());
-        }
-      );
-    } catch (err) {
-      console.warn('Firestore activity subscription failed:', err);
+  const q = query(collection(db, ACTIVITIES_COLLECTION), orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        time: docSnap.data().createdAt?.toDate?.() ? formatTimeAgo(docSnap.data().createdAt.toDate()) : 'Just now',
+        createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt || new Date().toISOString(),
+      }));
+      callback(list);
+    },
+    (error) => {
+      console.error('Firestore real-time activity subscription error:', error);
+      callback([]);
     }
-  }
-
-  callback(getLocalActivities());
-  return () => {};
+  );
 };
 
 /**
- * Record Immutable Audit Trail Entry
+  Record Immutable Audit Trail Entry in Firestore
  */
 export const logActivityRecord = async (payload) => {
   const logEntry = {
     ...payload,
     status: payload.status || 'Success',
-    ipAddress: payload.ipAddress || '192.168.1.45',
-    device: payload.device || 'Chrome / Windows Desktop',
-    createdAt: new Date().toISOString(),
+    ipAddress: payload.ipAddress || '127.0.0.1',
+    device: payload.device || 'Admin Dashboard Web',
+    createdAt: serverTimestamp(),
   };
 
-  if (isFirebaseConfigured) {
-    try {
-      const docRef = await addDoc(collection(db, ACTIVITIES_COLLECTION), logEntry);
-      return { id: docRef.id, ...logEntry };
-    } catch (err) {
-      console.warn('Firestore log activity failed, using local fallback:', err);
-    }
+  try {
+    const docRef = await addDoc(collection(db, ACTIVITIES_COLLECTION), logEntry);
+    return { id: docRef.id, ...logEntry };
+  } catch (err) {
+    console.error('Firestore logActivityRecord failed:', err);
+    return null;
   }
-
-  const current = getLocalActivities();
-  const created = { id: `LOG-${Date.now()}`, ...logEntry };
-  const updated = [created, ...current];
-  localStorage.setItem(LOCAL_ACTIVITIES_KEY, JSON.stringify(updated));
-  return created;
 };
+
+/**
+  Helper for friendly time display
+ */
+function formatTimeAgo(date) {
+  const seconds = Math.floor((new Date() - date) / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} mins ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} days ago`;
+}

@@ -15,8 +15,10 @@ import BookTable from '../../components/books/BookTable';
 import BookForm from '../../components/books/BookForm';
 import BookDetailsDrawer from '../../components/books/BookDetailsDrawer';
 import BookFilters from '../../components/books/BookFilters';
+import ProtectedPermission from '../../components/rbac/ProtectedPermission';
 import { useBooks } from '../../hooks/useBooks';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
+import { PERMISSION_MODULES, PERMISSION_ACTIONS } from '../../models/rbacModel';
 
 export const BooksPage = () => {
   const {
@@ -67,9 +69,11 @@ export const BooksPage = () => {
       title="Book Inventory"
       subtitle="Manage your complete library inventory, ISBN records, physical copy counts, and mobile app synchronization."
       actions={
-        <CustomButton variant="contained" startIcon={<AddIcon />} onClick={handleOpenAddForm}>
-          + Add Book
-        </CustomButton>
+        <ProtectedPermission module={PERMISSION_MODULES.BOOKS} action={PERMISSION_ACTIONS.CREATE}>
+          <CustomButton variant="contained" startIcon={<AddIcon />} onClick={handleOpenAddForm}>
+            + Add Book
+          </CustomButton>
+        </ProtectedPermission>
       }
     >
       {/* 1. Inventory Metric Cards */}

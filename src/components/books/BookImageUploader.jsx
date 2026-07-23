@@ -3,32 +3,69 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import LinearProgress from '@mui/material/LinearProgress';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { BORROW_COLORS } from '../../theme/borrowTheme';
+import toast from 'react-hot-toast';
 
-export const BookImageUploader = ({ currentImageUrl, onFileSelect }) => {
+import { BORROW_COLORS } from '../../theme/borrowTheme';
+import { uploadFileWithProgress } from '../../services/firebase/storageService';
+
+export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, bookId = 'new' }) => {
   const [previewUrl, setPreviewUrl] = useState(currentImageUrl || '');
   const [fileName, setFileName] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     if (currentImageUrl) setPreviewUrl(currentImageUrl);
   }, [currentImageUrl]);
 
-  const handleFileChange = (file) => {
+  const handleFileChange = async (file) => {
     if (!file) return;
 
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      alert('Please select a valid image file (JPEG, PNG, WEBP)');
+      toast.error('Please select a valid image file (JPEG, PNG, WEBP)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size exceeds 5MB limit.');
       return;
     }
 
     setFileName(file.name);
     const objectUrl = URL.createObjectURL(file);
     setPreviewUrl(objectUrl);
-    onFileSelect(file);
+
+    if (onFileSelect) onFileSelect(file);
+
+    // Upload to Firebase Storage with resumable progress
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const folderPath = `books/${bookId}`;
+      const result = await uploadFileWithProgress(
+        folderPath,
+        file,
+        { version: 1 },
+        (snapshot) => {
+          setUploadProgress(snapshot.progress);
+        }
+      );
+
+      setUploading(false);
+      setPreviewUrl(result.downloadURL);
+      toast.success('Book cover image uploaded & optimized (WebP)!');
+      if (onUrlChange) onUrlChange(result.downloadURL);
+    } catch (err) {
+      console.error('Firebase Storage upload failed:', err);
+      setUploading(false);
+      toast.error('Storage upload failed. Using local image preview.');
+    }
   };
 
   const handleDrop = (e) => {
@@ -98,7 +135,7 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect }) => {
             {previewUrl ? 'Change Cover Image' : 'Upload High Resolution Cover'}
           </Typography>
           <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, mb: 2 }}>
-            Drag and drop your image file here, or click browse to upload from your computer. Images are auto-compressed to WebP format.
+            Drag and drop your image file here, or click browse to upload to Firebase Storage. Images are auto-compressed to WebP format.
           </Typography>
 
           {fileName && (
@@ -111,11 +148,22 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect }) => {
             />
           )}
 
+          {/* Upload Progress Bar */}
+          {uploading && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 700, mb: 0.5, display: 'block' }}>
+                Uploading to Storage... {uploadProgress}%
+              </Typography>
+              <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 6, borderRadius: 3 }} />
+            </Box>
+          )}
+
           <Box sx={{ display: 'flex', gap: 1.5, justifyContent: { xs: 'center', sm: 'flex-start' } }}>
             <Button
               variant="outlined"
               component="label"
               startIcon={<CloudUploadIcon />}
+              disabled={uploading}
               sx={{
                 borderRadius: '10px',
                 borderColor: BORROW_COLORS.primary,
@@ -123,7 +171,7 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect }) => {
                 px: 2.5,
               }}
             >
-              Browse Image
+              {uploading ? 'Uploading...' : 'Browse Image'}
               <input
                 type="file"
                 hidden

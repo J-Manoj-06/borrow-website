@@ -1,6 +1,6 @@
 import React, { createContext, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { downloadQRCodePNG, printQRLabels } from '../services/qrCodeService';
+import { downloadQRCodePNG, downloadQRCodeSVG, printQRLabels } from '../services/qrCodeService';
 
 export const QRCodeContext = createContext(null);
 
@@ -37,7 +37,14 @@ export const QRCodeProvider = ({ children }) => {
   const handleDownloadPng = useCallback((copy, title) => {
     const copyId = copy.copyId || copy.id;
     downloadQRCodePNG(copyId, title);
-    toast.success(`Downloaded QR Code image for ${copyId}`);
+    toast.success(`Downloaded QR Code PNG for ${copyId}`);
+  }, []);
+
+  // Trigger Download SVG Action
+  const handleDownloadSvg = useCallback((copy, title) => {
+    const copyId = copy.copyId || copy.id;
+    downloadQRCodeSVG(copyId, title);
+    toast.success(`Downloaded QR Code SVG for ${copyId}`);
   }, []);
 
   // Trigger Print Labels Action
@@ -61,8 +68,11 @@ export const QRCodeProvider = ({ children }) => {
     openPrintLabelsModal,
     openCopyHistory,
     downloadSinglePng: handleDownloadPng,
+    downloadSingleSvg: handleDownloadSvg,
     printLabels: handlePrintLabels,
   };
 
   return <QRCodeContext.Provider value={value}>{children}</QRCodeContext.Provider>;
 };
+
+export default QRCodeProvider;

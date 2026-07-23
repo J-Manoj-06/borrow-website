@@ -5,21 +5,19 @@ import LoadingScreen from '../components/common/LoadingScreen';
 import { ROUTES } from '../constants/routes';
 
 export const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { isAuthenticated, role, loading } = useAuth();
+  const { isAuthenticated, accountStatus, role, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
-    return <LoadingScreen message="Verifying librarian credentials..." />;
+    return <LoadingScreen message="Verifying librarian session & security status..." />;
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || accountStatus !== 'Active') {
     return <Navigate to={ROUTES.LOGIN} state={{ from: location }} replace />;
   }
 
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-    return (
-      <Navigate to={ROUTES.DASHBOARD} replace />
-    );
+    return <Navigate to={ROUTES.DASHBOARD} replace />;
   }
 
   return children;

@@ -22,6 +22,7 @@ import CommandPalette from './components/search/CommandPalette';
 import SavedFiltersDialog from './components/search/SavedFiltersDialog';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import NetworkMonitor from './components/common/NetworkMonitor';
+import NetworkStatusIndicator from './components/common/NetworkStatusIndicator';
 import PWAInstallPrompt from './components/common/PWAInstallPrompt';
 import useQRCode from './hooks/useQRCode';
 import useGlobalSearch from './hooks/useGlobalSearch';
@@ -54,6 +55,7 @@ const GlobalModals = () => {
         open={savedFiltersDialogOpen}
         onClose={() => setSavedFiltersDialogOpen(false)}
       />
+      <NetworkStatusIndicator />
       <PWAInstallPrompt />
     </>
   );

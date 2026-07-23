@@ -1,16 +1,18 @@
 import React, { createContext, useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import {
-  getAllBooks,
+  subscribeToBooks,
+  subscribeToBookCopies,
   getBookCopies,
   createBook,
   updateBook as updateBookService,
+  updateBookCopyStatus,
   archiveBook as archiveBookService,
   restoreBook as restoreBookService,
   deleteBookPermanent,
   checkIsbnExists,
 } from '../services/firebase/bookService';
-import { INITIAL_MOCK_BOOKS, BOOK_STATUSES } from '../models/bookModel';
+import { BOOK_STATUSES } from '../models/bookModel';
 
 export const BookContext = createContext(null);
 
@@ -35,25 +37,29 @@ export const BookProvider = ({ children }) => {
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [editingBook, setEditingBook] = useState(null);
 
-  // Load books on mount
-  const refreshBooks = useCallback(async () => {
+  // Real-Time Firestore Snapshot Subscription for Books
+  useEffect(() => {
     setLoading(true);
-    try {
-      const data = await getAllBooks();
+    const unsubscribe = subscribeToBooks((data) => {
       setBooks(data);
-    } catch (err) {
-      console.error('Failed to load books:', err);
-      setBooks(INITIAL_MOCK_BOOKS);
-    } finally {
       setLoading(false);
-    }
+    });
+    return () => unsubscribe();
   }, []);
 
+  // Real-Time Firestore Snapshot Subscription for Physical Copies of Selected Book
   useEffect(() => {
-    refreshBooks();
-  }, [refreshBooks]);
+    if (!selectedBook?.id) {
+      setSelectedBookCopies([]);
+      return () => {};
+    }
+    const unsubscribe = subscribeToBookCopies(selectedBook.id, (copies) => {
+      setSelectedBookCopies(copies);
+    });
+    return () => unsubscribe();
+  }, [selectedBook?.id]);
 
-  // Compute live statistics metrics defensively
+  // Compute live statistics metrics defensively from Firestore data
   const stats = useMemo(() => {
     let totalTitles = 0;
     let totalCopies = 0;
@@ -189,11 +195,10 @@ export const BookProvider = ({ children }) => {
 
     try {
       const created = await createBook(bookData, coverFile);
-      setBooks((prev) => [created, ...prev]);
       toast.success(`"${created.title}" added to inventory successfully!`);
       return created;
     } catch (err) {
-      toast.error('Failed to create book');
+      toast.error('Failed to create book in Firestore');
       throw err;
     }
   }, []);
@@ -208,28 +213,38 @@ export const BookProvider = ({ children }) => {
 
     try {
       const updated = await updateBookService(bookId, bookData, coverFile);
-      setBooks((prev) => prev.map((b) => (b.id === bookId ? { ...b, ...updated } : b)));
       toast.success(`Book updated successfully!`);
       if (selectedBook?.id === bookId) {
         setSelectedBook((prev) => ({ ...prev, ...updated }));
       }
       return updated;
     } catch (err) {
-      toast.error('Failed to update book');
+      toast.error(err.message || 'Failed to update book');
       throw err;
     }
   }, [selectedBook]);
+
+  // Update Individual Physical Book Copy Status / Location Action
+  const handleUpdateCopyStatus = useCallback(
+    async (copyId, newStatus, newCondition, shelfLocation, rackNumber, notes) => {
+      try {
+        await updateBookCopyStatus(copyId, newStatus, newCondition, shelfLocation, rackNumber, notes);
+        toast.success(`Physical copy ${copyId} updated!`);
+      } catch (err) {
+        toast.error(err.message || 'Failed to update copy status');
+        throw err;
+      }
+    },
+    []
+  );
 
   // Archive Book Action (Soft Delete)
   const handleArchiveBook = useCallback(async (bookId) => {
     try {
       await archiveBookService(bookId);
-      setBooks((prev) =>
-        prev.map((b) => (b.id === bookId ? { ...b, isArchived: true, status: BOOK_STATUSES.ARCHIVED } : b))
-      );
       toast.success('Book moved to Archive.');
-    } catch {
-      toast.error('Failed to archive book');
+    } catch (err) {
+      toast.error(err.message || 'Failed to archive book');
     }
   }, []);
 
@@ -237,12 +252,9 @@ export const BookProvider = ({ children }) => {
   const handleRestoreBook = useCallback(async (bookId) => {
     try {
       await restoreBookService(bookId);
-      setBooks((prev) =>
-        prev.map((b) => (b.id === bookId ? { ...b, isArchived: false, status: BOOK_STATUSES.AVAILABLE } : b))
-      );
       toast.success('Book restored to active inventory.');
-    } catch {
-      toast.error('Failed to restore book');
+    } catch (err) {
+      toast.error(err.message || 'Failed to restore book');
     }
   }, []);
 
@@ -250,14 +262,13 @@ export const BookProvider = ({ children }) => {
   const handleDeleteBook = useCallback(async (bookId) => {
     try {
       await deleteBookPermanent(bookId);
-      setBooks((prev) => prev.filter((b) => b.id !== bookId));
       toast.success('Book permanently removed.');
       if (selectedBook?.id === bookId) {
         setDrawerOpen(false);
         setSelectedBook(null);
       }
-    } catch {
-      toast.error('Failed to delete book');
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete book');
     }
   }, [selectedBook]);
 
@@ -273,7 +284,6 @@ export const BookProvider = ({ children }) => {
 
     try {
       const created = await createBook(duplicatePayload, null);
-      setBooks((prev) => [created, ...prev]);
       toast.success(`Duplicated "${created.title}"!`);
     } catch {
       toast.error('Failed to duplicate book');
@@ -306,11 +316,11 @@ export const BookProvider = ({ children }) => {
     selectBookForDetails,
     addBook: handleAddBook,
     updateBook: handleUpdateBook,
+    updateCopyStatus: handleUpdateCopyStatus,
     archiveBook: handleArchiveBook,
     restoreBook: handleRestoreBook,
     deleteBook: handleDeleteBook,
     duplicateBook: handleDuplicateBook,
-    refreshBooks,
   };
 
   return <BookContext.Provider value={value}>{children}</BookContext.Provider>;

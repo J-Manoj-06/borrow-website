@@ -1,96 +1,120 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper functions
-    function isSignedIn() {
+    function signedIn() {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
     }
 
-    function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.role == 'Super Admin' ||
-        request.auth.token.role == 'Library Administrator' ||
-        request.auth.token.role == 'Librarian' ||
-        getUserData().role != null
+    // ----------------------------------------------------
+    // EXISTING APP COLLECTIONS
+    // ----------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSelf(userId) || (request.query.limit <= 1 && request.query.filters[0].field == 'phoneNumber');
+      allow create: if isSelf(userId);
+      allow update: if isSelf(userId);
+      allow delete: if false;
+    }
+
+    match /machineries/{machineryId} {
+      allow read: if true;
+      allow create, update, delete: if signedIn();
+    }
+
+    match /equipments/{equipmentId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /equipment/{equipmentId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.owner_user_id == request.auth.uid;
+      allow update: if signedIn() && (
+        resource.data.owner_user_id == request.auth.uid || 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'savedBy'])
       );
+      allow delete: if signedIn() && resource.data.owner_user_id == request.auth.uid;
     }
 
-    function isSuperAdmin() {
-      return isSignedIn() && (
-        request.auth.token.role == 'Super Admin' ||
-        getUserData().role == 'Super Admin'
+    match /marketplace_surplus/{surplusId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /farm_surplus_exchange/{exchangeId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /bookings/{bookingId} {
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.machineryId is string
       );
+      allow update: if signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
+      allow delete: if false;
     }
 
-    // Books Collection
+    match /shared_links_analytics/{docId} {
+      allow read, write: if signedIn();
+    }
+
+    // ----------------------------------------------------
+    // BORROW LIBRARY ADMIN PORTAL COLLECTIONS
+    // ----------------------------------------------------
+    match /admins/{adminId} {
+      allow read, write: if signedIn();
+    }
+
     match /books/{bookId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin();
-      allow delete: if isSuperAdmin();
+      allow read, write: if signedIn();
     }
 
-    // Book Copies Collection
     match /bookCopies/{copyId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin();
-      allow delete: if isSuperAdmin();
+      allow read, write: if signedIn();
     }
 
-    // Students Collection
     match /students/{studentId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin() || (isSignedIn() && request.auth.uid == studentId);
-      allow delete: if isSuperAdmin();
+      allow read, write: if signedIn();
     }
 
-    // Borrow Requests Collection
     match /borrowRequests/{requestId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
+      allow read, write: if signedIn();
     }
 
-    // Transactions Collection
     match /transactions/{transactionId} {
-      allow read: if isSignedIn();
-      allow create, update: if isAdmin();
-      allow delete: if isSuperAdmin();
+      allow read, write: if signedIn();
     }
 
-    // Notifications & Announcements Collections
     match /notifications/{notificationId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow read, write: if signedIn();
     }
 
     match /announcements/{announcementId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow read, write: if signedIn();
     }
 
-    // Activity Logs Collection (Read-only for Admins, Write by System/Admin)
     match /activityLogs/{logId} {
-      allow read: if isAdmin();
-      allow create: if isSignedIn();
-      allow update, delete: if false; // Immutable Audit Logs
+      allow read, write: if signedIn();
     }
 
-    // Settings Collection
     match /settings/{settingId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow read, write: if signedIn();
     }
 
-    // Admins Collection
-    match /admins/{adminId} {
-      allow read: if isAdmin();
-      allow create, update: if isSuperAdmin();
-      allow delete: if isSuperAdmin();
+    match /reports/{reportId} {
+      allow read, write: if signedIn();
     }
   }
 }

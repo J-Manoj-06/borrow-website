@@ -44,7 +44,7 @@ export const CustomTable = ({
       }}
     >
       <TableContainer sx={{ maxHeight: 600 }}>
-        <Table stickyHeader aria-label="custom data table">
+        <Table stickyHeader role="grid" aria-label="Library Data Management Table">
           <TableHead>
             <TableRow>
               {columns.map((col) => (
@@ -52,6 +52,7 @@ export const CustomTable = ({
                   key={col.id}
                   align={col.align || 'left'}
                   style={{ minWidth: col.minWidth, width: col.width }}
+                  aria-label={col.label}
                 >
                   {col.label}
                 </TableCell>
@@ -84,13 +85,17 @@ export const CustomTable = ({
               displayData.map((row, rowIndex) => (
                 <TableRow
                   hover
-                  tabIndex={-1}
+                  tabIndex={0}
                   key={row.id || rowIndex}
                   sx={{
                     '&:last-child td, &:last-child th': { border: 0 },
                     transition: 'background-color 0.15s ease',
                     '&:hover': {
                       backgroundColor: 'rgba(37, 99, 235, 0.02)',
+                    },
+                    '&:focus-visible': {
+                      outline: `2px solid ${BORROW_COLORS.primary}`,
+                      outlineOffset: '-2px',
                     },
                   }}
                 >
@@ -147,6 +152,7 @@ export const StatusChip = ({ status }) => {
     <Chip
       label={status}
       size="small"
+      aria-label={`Status: ${status}`}
       sx={{
         backgroundColor: bg,
         color: color,

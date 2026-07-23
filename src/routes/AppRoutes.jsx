@@ -37,16 +37,87 @@ export const AppRoutes = () => {
             </ProtectedRoute>
           }
         >
-          <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-          <Route path={ROUTES.BOOKS} element={<BooksPage />} />
-          <Route path={ROUTES.REQUESTS} element={<RequestsPage />} />
-          <Route path={ROUTES.RETURNS} element={<ReturnsPage />} />
-          <Route path={ROUTES.STUDENTS} element={<StudentsPage />} />
-          <Route path={ROUTES.SCANNER} element={<ScannerPage />} />
-          <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
-          <Route path={ROUTES.REPORTS} element={<ReportsPage />} />
+          {/* Dashboard */}
+          <Route
+            path={ROUTES.DASHBOARD}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.DASHBOARD} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <DashboardPage />
+              </ProtectedPermission>
+            }
+          />
 
-          {/* Activity Logs (Protected View Permission) */}
+          {/* Books */}
+          <Route
+            path={ROUTES.BOOKS}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.BOOKS} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <BooksPage />
+              </ProtectedPermission>
+            }
+          />
+
+          {/* Borrow Requests */}
+          <Route
+            path={ROUTES.REQUESTS}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.REQUESTS} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <RequestsPage />
+              </ProtectedPermission>
+            }
+          />
+
+          {/* Issue & Returns */}
+          <Route
+            path={ROUTES.RETURNS}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.RETURNS} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <ReturnsPage />
+              </ProtectedPermission>
+            }
+          />
+
+          {/* Students */}
+          <Route
+            path={ROUTES.STUDENTS}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.STUDENTS} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <StudentsPage />
+              </ProtectedPermission>
+            }
+          />
+
+          {/* Scanner */}
+          <Route
+            path={ROUTES.SCANNER}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.SCANNER} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <ScannerPage />
+              </ProtectedPermission>
+            }
+          />
+
+          {/* Notifications */}
+          <Route
+            path={ROUTES.NOTIFICATIONS}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.NOTIFICATIONS} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <NotificationsPage />
+              </ProtectedPermission>
+            }
+          />
+
+          {/* Reports */}
+          <Route
+            path={ROUTES.REPORTS}
+            element={
+              <ProtectedPermission module={PERMISSION_MODULES.REPORTS} action={PERMISSION_ACTIONS.VIEW} fallback={<AccessDenied />}>
+                <ReportsPage />
+              </ProtectedPermission>
+            }
+          />
+
+          {/* Activity Logs */}
           <Route
             path={ROUTES.ACTIVITY}
             element={
@@ -56,7 +127,7 @@ export const AppRoutes = () => {
             }
           />
 
-          {/* Admin Management (Protected View Permission) */}
+          {/* Admin Management */}
           <Route
             path={ROUTES.ADMINS}
             element={
@@ -66,7 +137,7 @@ export const AppRoutes = () => {
             }
           />
 
-          {/* Settings (Protected View Permission) */}
+          {/* Settings */}
           <Route
             path={ROUTES.SETTINGS}
             element={

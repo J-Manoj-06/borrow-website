@@ -4,6 +4,8 @@ import {
   subscribeToTransactions,
   issueBookTransaction as issueService,
   returnBookTransaction as returnService,
+  renewBookTransaction as renewService,
+  getReturnReminders,
 } from '../services/firebase/transactionService';
 import { TRANSACTION_STATUSES } from '../models/transactionModel';
 import differenceInDays from 'date-fns/differenceInDays';
@@ -104,7 +106,6 @@ export const TransactionProvider = ({ children }) => {
         currentlyBorrowed,
         overdueBooks,
         pendingPickups,
-        availableCopies: 1120, // Synchronized with inventory catalog
       },
     };
   }, [transactions]);
@@ -169,7 +170,7 @@ export const TransactionProvider = ({ children }) => {
           return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
         }
         if (filterOptions.sortBy === 'Student Name') {
-          return a.studentName.localeCompare(b.studentName);
+          return (a.studentName || '').localeCompare(b.studentName || '');
         }
         return 0;
       });
@@ -192,27 +193,41 @@ export const TransactionProvider = ({ children }) => {
     setDrawerOpen(true);
   }, []);
 
-  // Handle Issue Action
+  // Handle Issue Action (Atomic Firestore Transaction)
   const handleIssueBook = useCallback(async (issueData, adminName) => {
     try {
       const created = await issueService(issueData, adminName);
-      toast.success(`Book issued successfully! Copy ID: ${created.bookCopyId}`);
+      toast.success(`Book issued successfully!`);
       setIssueDialogOpen(false);
       return created;
-    } catch {
-      toast.error('Failed to issue book');
+    } catch (err) {
+      toast.error(err.message || 'Failed to issue book');
+      throw err;
     }
   }, []);
 
-  // Handle Return Action
+  // Handle Return Action (Atomic Firestore Transaction & Inspection)
   const handleReturnBook = useCallback(async (transactionId, condition, notes, adminName) => {
     try {
       await returnService(transactionId, condition, notes, adminName);
       toast.success('Book returned and checked into inventory!');
       setReturnDialogOpen(false);
       setTargetTransaction(null);
-    } catch {
-      toast.error('Failed to mark return');
+    } catch (err) {
+      toast.error(err.message || 'Failed to mark return');
+      throw err;
+    }
+  }, []);
+
+  // Handle Renew Action (Atomic Firestore Transaction & Queue Validation)
+  const handleRenewBook = useCallback(async (transactionId, extensionDays = 14, adminName) => {
+    try {
+      const res = await renewService(transactionId, extensionDays, adminName);
+      toast.success(`Loan renewed by ${extensionDays} days! New due date: ${new Date(res.newDueDate).toLocaleDateString()}`);
+      return res;
+    } catch (err) {
+      toast.error(err.message || 'Failed to renew loan');
+      throw err;
     }
   }, []);
 
@@ -245,7 +260,11 @@ export const TransactionProvider = ({ children }) => {
     selectTransactionForDetails,
     issueBook: handleIssueBook,
     returnBook: handleReturnBook,
+    renewBook: handleRenewBook,
+    getReminders: getReturnReminders,
   };
 
   return <TransactionContext.Provider value={value}>{children}</TransactionContext.Provider>;
 };
+
+export default TransactionProvider;

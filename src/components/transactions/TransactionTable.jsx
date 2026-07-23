@@ -6,6 +6,7 @@ import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import AssignmentReturnedIcon from '@mui/icons-material/AssignmentReturned';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import format from 'date-fns/format';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
@@ -18,10 +19,15 @@ export const TransactionTable = () => {
     loading,
     selectTransactionForDetails,
     openReturnModal,
+    renewBook,
   } = useTransactions();
 
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const handleRenewClick = async (row) => {
+    await renewBook(row.id || row.transactionId, 14, 'Librarian');
+  };
 
   const columns = [
     {
@@ -38,7 +44,7 @@ export const TransactionTable = () => {
             alt={val}
             sx={{ width: 36, height: 36, bgcolor: BORROW_COLORS.primary, fontWeight: 700, fontSize: '0.85rem' }}
           >
-            {val[0]}
+            {val ? val[0] : 'S'}
           </Avatar>
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
@@ -155,24 +161,40 @@ export const TransactionTable = () => {
     {
       id: 'actions',
       label: 'Actions',
-      minWidth: 130,
+      minWidth: 140,
       align: 'right',
       format: (_, row) => (
         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
           {(row.computedStatus === 'Issued' || row.computedStatus === 'Overdue') && (
-            <Tooltip title="Mark Book Returned">
-              <IconButton
-                size="small"
-                onClick={() => openReturnModal(row)}
-                sx={{
-                  backgroundColor: BORROW_COLORS.successLight,
-                  color: BORROW_COLORS.success,
-                  '&:hover': { backgroundColor: '#BBF7D0' },
-                }}
-              >
-                <AssignmentReturnedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <>
+              <Tooltip title="Renew Loan (+14 Days)">
+                <IconButton
+                  size="small"
+                  onClick={() => handleRenewClick(row)}
+                  sx={{
+                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                    color: BORROW_COLORS.primary,
+                    '&:hover': { backgroundColor: 'rgba(37, 99, 235, 0.15)' },
+                  }}
+                >
+                  <AutorenewIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Mark Book Returned">
+                <IconButton
+                  size="small"
+                  onClick={() => openReturnModal(row)}
+                  sx={{
+                    backgroundColor: BORROW_COLORS.successLight,
+                    color: BORROW_COLORS.success,
+                    '&:hover': { backgroundColor: '#BBF7D0' },
+                  }}
+                >
+                  <AssignmentReturnedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
           )}
 
           <Tooltip title="View Transaction Audit Trail">

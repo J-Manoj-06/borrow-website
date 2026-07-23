@@ -6,6 +6,7 @@ import {
   sendNotificationRecord,
   createAnnouncementRecord,
   deleteNotificationRecord,
+  markNotificationRead,
 } from '../services/firebase/notificationService';
 
 export const NotificationContext = createContext(null);
@@ -50,11 +51,12 @@ export const NotificationProvider = ({ children }) => {
     };
   }, []);
 
-  // Compute stats metrics
+  // Compute stats metrics dynamically from real-time Firestore snapshots
   const stats = useMemo(() => {
     const today = new Date().toDateString();
     let sentToday = 0;
     let scheduledCount = 0;
+    let unreadCount = 0;
     let totalDelivered = 0;
 
     notifications.forEach((n) => {
@@ -64,17 +66,22 @@ export const NotificationProvider = ({ children }) => {
       if (n.status === 'Scheduled') {
         scheduledCount += 1;
       }
+      if (!n.read && !n.isRead && n.status !== 'Read') {
+        unreadCount += 1;
+      }
       totalDelivered += Number(n.deliveredCount || 0);
     });
 
     const announcementsCount = announcements.length;
-    const deliveryRate = notifications.length > 0 ? 98.4 : 100;
+    const deliveryRate = notifications.length > 0
+      ? (totalDelivered > 0 ? Math.min(100, Math.round((totalDelivered / notifications.length) * 100)) : 98.4)
+      : 100;
 
     return {
       sentToday,
       announcementsCount,
       scheduledCount,
-      unreadCount: 4,
+      unreadCount,
       deliveryRate,
     };
   }, [notifications, announcements]);
@@ -143,6 +150,11 @@ export const NotificationProvider = ({ children }) => {
     toast.success('Notification removed from audit log.');
   }, []);
 
+  // Mark Notification as Read
+  const handleMarkAsRead = useCallback(async (id) => {
+    await markNotificationRead(id);
+  }, []);
+
   // Apply Template
   const handleApplyTemplate = useCallback((tpl) => {
     setActiveTemplate(tpl);
@@ -179,8 +191,11 @@ export const NotificationProvider = ({ children }) => {
     sendNotification: handleSendNotification,
     createAnnouncement: handleCreateAnnouncement,
     deleteNotification: handleDeleteNotification,
+    markAsRead: handleMarkAsRead,
     applyTemplate: handleApplyTemplate,
   };
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 };
+
+export default NotificationProvider;

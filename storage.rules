@@ -2,27 +2,57 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // Common Helper Functions
     function isSignedIn() {
       return request.auth != null;
     }
 
+    function isSmallMedia() {
+      return request.resource.size < 5 * 1024 * 1024; // 5MB max
+    }
+
     function isImageFile() {
-      return request.resource.contentType.matches('image/.*') &&
-             request.resource.size < 5 * 1024 * 1024; // 5MB max
+      return request.resource.contentType.matches('image/.*') && isSmallMedia();
     }
 
-    match /book-covers/{imageId} {
-      allow read: if true; // Public view for mobile app and web
-      allow write: if isSignedIn() && isImageFile();
+    function isPdfOrDocument() {
+      return (request.resource.contentType.matches('application/pdf') ||
+              request.resource.contentType.matches('text/csv')) && isSmallMedia();
     }
 
-    match /announcements/{imageId} {
+    // 1. Book Covers (Publicly readable, Admin writable)
+    match /books/{bookId}/{allPaths=**} {
       allow read: if true;
       allow write: if isSignedIn() && isImageFile();
     }
 
-    match /admin-avatars/{imageId} {
+    // 2. Student Profile Photos
+    match /profiles/{userId}/{allPaths=**} {
       allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImageFile();
+    }
+
+    // 3. Admin & Librarian Avatars
+    match /admins/{adminId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isImageFile();
+    }
+
+    // 4. Exported Reports & Sticky Label PDFs
+    match /reports/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (isPdfOrDocument() || isImageFile());
+    }
+
+    // 5. System Logos
+    match /logos/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && isImageFile();
+    }
+
+    // Legacy fallback matches
+    match /book-covers/{imageId} {
+      allow read: if true;
       allow write: if isSignedIn() && isImageFile();
     }
   }

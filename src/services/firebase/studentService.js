@@ -1,56 +1,89 @@
 import {
   collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
   query,
   orderBy,
   onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebaseConfig';
-import { INITIAL_MOCK_STUDENTS } from '../../models/studentModel';
+import { db } from './firebaseConfig';
+import { logActivityRecord } from './activityService';
 
 const STUDENTS_COLLECTION = 'students';
-const LOCAL_STUDENTS_KEY = 'borrow_admin_local_students';
 
-const getLocalStudents = () => {
-  const stored = localStorage.getItem(LOCAL_STUDENTS_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return INITIAL_MOCK_STUDENTS;
+/**
+  Subscribe to Real-Time Students Snapshot
+ */
+export const subscribeToStudents = (callback) => {
+  const q = query(collection(db, STUDENTS_COLLECTION), orderBy('fullName', 'asc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const students = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+        createdAt: docSnap.data().createdAt?.toDate?.()?.toISOString() || docSnap.data().createdAt || new Date().toISOString(),
+        updatedAt: docSnap.data().updatedAt?.toDate?.()?.toISOString() || docSnap.data().updatedAt || new Date().toISOString(),
+      }));
+      callback(students);
+    },
+    (error) => {
+      console.error('Firestore real-time students subscription error:', error);
+      callback([]);
     }
-  }
-  localStorage.setItem(LOCAL_STUDENTS_KEY, JSON.stringify(INITIAL_MOCK_STUDENTS));
-  return INITIAL_MOCK_STUDENTS;
+  );
 };
 
 /**
- * Subscribe to Real-Time Students Snapshot
+  Create New Student Profile in Firestore
  */
-export const subscribeToStudents = (callback) => {
-  if (isFirebaseConfigured) {
-    try {
-      const q = query(collection(db, STUDENTS_COLLECTION), orderBy('fullName', 'asc'));
-      return onSnapshot(
-        q,
-        (snapshot) => {
-          const students = snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          }));
-          callback(students);
-        },
-        (error) => {
-          console.warn('Firestore student snapshot error, using local fallback:', error);
-          callback(getLocalStudents());
-        }
-      );
-    } catch (err) {
-      console.warn('Firestore student subscription failed:', err);
-    }
-  }
+export const createStudent = async (studentData) => {
+  const payload = {
+    ...studentData,
+    status: studentData.status || 'Active',
+    borrowedCount: studentData.borrowedCount || 0,
+    totalBorrowedCount: studentData.totalBorrowedCount || 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
 
-  const localData = getLocalStudents();
-  callback(localData);
+  const docRef = await addDoc(collection(db, STUDENTS_COLLECTION), payload);
 
-  return () => {};
+  await logActivityRecord({
+    user: 'Librarian',
+    action: 'registered student profile for',
+    target: studentData.fullName,
+    type: 'add',
+  });
+
+  return { id: docRef.id, ...studentData };
+};
+
+/**
+  Update Student Profile in Firestore
+ */
+export const updateStudent = async (id, updateFields) => {
+  const studentRef = doc(db, STUDENTS_COLLECTION, id);
+  await updateDoc(studentRef, {
+    ...updateFields,
+    updatedAt: serverTimestamp(),
+  });
+  return true;
+};
+
+/**
+  Delete Student Profile from Firestore
+ */
+export const deleteStudent = async (id, fullName = 'Student') => {
+  await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
+  await logActivityRecord({
+    user: 'Librarian',
+    action: 'deleted student profile',
+    target: fullName,
+    type: 'delete',
+  });
+  return true;
 };

@@ -2,8 +2,9 @@ import React, { createContext, useState, useEffect, useMemo, useCallback } from 
 import toast from 'react-hot-toast';
 import {
   subscribeToBorrowRequests,
-  approveBorrowRequest as approveService,
-  rejectBorrowRequest as rejectService,
+  approveBorrowRequestTransaction,
+  rejectBorrowRequestTransaction,
+  checkAndExpireReservations,
 } from '../services/firebase/borrowRequestService';
 import { REQUEST_STATUSES } from '../models/borrowRequestModel';
 
@@ -28,13 +29,16 @@ export const BorrowRequestProvider = ({ children }) => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [targetRequest, setTargetRequest] = useState(null);
 
-  // Subscribe to real-time Firestore updates on mount
+  // Subscribe to real-time Firestore updates on mount and check reservation expirations
   useEffect(() => {
     setLoading(true);
     const unsubscribe = subscribeToBorrowRequests((data) => {
       setRequests(data);
       setLoading(false);
     });
+
+    // Check reservation expiration on mount
+    checkAndExpireReservations().catch(console.warn);
 
     return () => unsubscribe();
   }, []);
@@ -61,7 +65,7 @@ export const BorrowRequestProvider = ({ children }) => {
         if (r.rejectedDate && new Date(r.rejectedDate).toDateString() === todayStr) {
           rejectedToday += 1;
         }
-      } else if (r.status === REQUEST_STATUSES.RETURNED) {
+      } else if (r.status === REQUEST_STATUSES.RETURNED || r.status === 'Completed') {
         completedRequests += 1;
       }
     });
@@ -123,10 +127,10 @@ export const BorrowRequestProvider = ({ children }) => {
           return new Date(a.requestDate) - new Date(b.requestDate);
         }
         if (filterOptions.sortBy === 'Student Name') {
-          return a.studentName.localeCompare(b.studentName);
+          return (a.studentName || '').localeCompare(b.studentName || '');
         }
         if (filterOptions.sortBy === 'Book Name') {
-          return a.bookTitle.localeCompare(b.bookTitle);
+          return (a.bookTitle || '').localeCompare(b.bookTitle || '');
         }
         return 0;
       });
@@ -150,27 +154,30 @@ export const BorrowRequestProvider = ({ children }) => {
     setDrawerOpen(true);
   }, []);
 
-  // Handle Approve Action
+  // Handle Approve Action (Atomic Firestore Transaction & Copy Reservation)
   const handleApprove = useCallback(async (requestId, durationDays, adminName) => {
     try {
-      await approveService(requestId, durationDays, adminName);
-      toast.success(`Request ${requestId} approved successfully!`);
+      const res = await approveBorrowRequestTransaction(requestId, durationDays, adminName);
+      toast.success(`Request ${requestId} approved! Reserved copy: ${res.reservedCopyId}`);
       setApprovalDialogOpen(false);
       setTargetRequest(null);
-    } catch {
-      toast.error('Failed to approve borrow request');
+      return res;
+    } catch (err) {
+      toast.error(err.message || 'Failed to approve borrow request');
+      throw err;
     }
   }, []);
 
-  // Handle Reject Action
+  // Handle Reject Action (Atomic Firestore Transaction & Structured Reason)
   const handleReject = useCallback(async (requestId, reason, adminName) => {
     try {
-      await rejectService(requestId, reason, adminName);
+      await rejectBorrowRequestTransaction(requestId, reason, adminName);
       toast.error(`Request ${requestId} rejected.`);
       setRejectDialogOpen(false);
       setTargetRequest(null);
-    } catch {
-      toast.error('Failed to reject borrow request');
+    } catch (err) {
+      toast.error(err.message || 'Failed to reject borrow request');
+      throw err;
     }
   }, []);
 
@@ -207,3 +214,5 @@ export const BorrowRequestProvider = ({ children }) => {
 
   return <BorrowRequestContext.Provider value={value}>{children}</BorrowRequestContext.Provider>;
 };
+
+export default BorrowRequestProvider;

@@ -6,7 +6,7 @@
  * Generate a standalone SVG String representing a QR Code matrix for a given Copy ID
  */
 export const generateQRCodeSVG = (copyId, size = 200) => {
-  const code = copyId || 'COPY-000001';
+  const code = copyId || 'CPY-000001';
 
   // SVG QR Code Graphic Rendering
   return `
@@ -74,6 +74,21 @@ export const generateQRCodeSVG = (copyId, size = 200) => {
 };
 
 /**
+ * Trigger SVG file download for a single QR Code
+ */
+export const downloadQRCodeSVG = (copyId, title = 'Book Copy') => {
+  const svgData = generateQRCodeSVG(copyId, 400);
+  const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const downloadLink = document.createElement('a');
+  downloadLink.href = url;
+  downloadLink.download = `QR_${copyId}.svg`;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+};
+
+/**
  * Trigger PNG file download for a single QR Code
  */
 export const downloadQRCodePNG = (copyId, title = 'Book Copy') => {
@@ -101,7 +116,7 @@ export const downloadQRCodePNG = (copyId, title = 'Book Copy') => {
 };
 
 /**
- * Print batch QR code sticky labels
+ * Print batch QR code sticky labels formatted for A4 Sheet Grid
  */
 export const printQRLabels = (copiesList = [], bookTitle = 'Borrow Library') => {
   const printWindow = window.open('', '_blank');
@@ -110,10 +125,11 @@ export const printQRLabels = (copiesList = [], bookTitle = 'Borrow Library') => 
   const labelsHtml = copiesList
     .map(
       (c) => `
-    <div style="width: 190px; height: 140px; padding: 10px; margin: 8px; border: 1.5px dashed #2563EB; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #FFFFFF; float: left; page-break-inside: avoid;">
-      ${generateQRCodeSVG(c.copyId || c.id, 75)}
-      <div style="font-size: 11px; font-weight: 800; color: #0F172A; margin-top: 4px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${bookTitle}</div>
+    <div style="width: 200px; height: 145px; padding: 10px; margin: 8px; border: 1.5px dashed #2563EB; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #FFFFFF; float: left; page-break-inside: avoid; box-sizing: border-box;">
+      ${generateQRCodeSVG(c.copyId || c.id, 70)}
+      <div style="font-size: 11px; font-weight: 800; color: #0F172A; margin-top: 4px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${bookTitle}</div>
       <div style="font-size: 11px; font-weight: 800; color: #2563EB; font-family: monospace; margin-top: 2px;">${c.copyId || c.id}</div>
+      <div style="font-size: 9px; font-weight: 600; color: #64748B;">Location: ${c.shelfLocation || 'Shelf CS-01'} (Rack ${c.rackNumber || 'R-01'})</div>
     </div>
   `
     )
@@ -125,7 +141,7 @@ export const printQRLabels = (copiesList = [], bookTitle = 'Borrow Library') => 
       <head>
         <title>Print QR Sticky Labels - ${bookTitle}</title>
         <style>
-          body { font-family: sans-serif; padding: 20px; background: #FFF; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #FFF; }
           .label-grid { display: flex; flex-wrap: wrap; }
           @media print {
             body { padding: 0; }

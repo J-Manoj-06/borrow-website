@@ -16,15 +16,36 @@ import { motion } from 'framer-motion';
 import { NAVIGATION_ITEMS } from '../../constants/navigation';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { useAuth } from '../../hooks/useAuth';
+import { useRBAC } from '../../hooks/useRBAC';
+import { usePendingBorrowRequests } from '../../hooks/usePendingBorrowRequests';
+import { useUnreadNotifications } from '../../hooks/useUnreadNotifications';
+import { PERMISSION_MODULES, PERMISSION_ACTIONS } from '../../models/rbacModel';
 
 export const SIDEBAR_WIDTH = 265;
 
 const MotionListItemButton = motion.create(ListItemButton);
 
+const MODULE_MAP = {
+  dashboard: PERMISSION_MODULES.DASHBOARD,
+  books: PERMISSION_MODULES.BOOKS,
+  requests: PERMISSION_MODULES.REQUESTS,
+  returns: PERMISSION_MODULES.RETURNS,
+  students: PERMISSION_MODULES.STUDENTS,
+  scanner: PERMISSION_MODULES.SCANNER,
+  notifications: PERMISSION_MODULES.NOTIFICATIONS,
+  reports: PERMISSION_MODULES.REPORTS,
+  activity: PERMISSION_MODULES.ACTIVITY,
+  admins: PERMISSION_MODULES.ADMINS,
+  settings: PERMISSION_MODULES.SETTINGS,
+};
+
 export const Sidebar = ({ mobileOpen, onMobileClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role, logout } = useAuth();
+  const { user, adminProfile, role, logout } = useAuth();
+  const { hasPermission } = useRBAC();
+  const { pendingCount } = usePendingBorrowRequests();
+  const { unreadCount } = useUnreadNotifications();
 
   const handleNavClick = (path) => {
     navigate(path);
@@ -35,6 +56,19 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
     if (mobileOpen) onMobileClose();
     await logout();
     navigate('/login');
+  };
+
+  // Filter navigation items dynamically based on module view permissions
+  const visibleNavItems = NAVIGATION_ITEMS.filter((item) => {
+    const targetModule = MODULE_MAP[item.id];
+    if (!targetModule) return true;
+    return hasPermission(targetModule, PERMISSION_ACTIONS.VIEW);
+  });
+
+  const getBadgeValue = (id) => {
+    if (id === 'requests') return pendingCount;
+    if (id === 'notifications') return unreadCount;
+    return 0;
   };
 
   const sidebarContent = (
@@ -98,9 +132,10 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
         </Typography>
 
         <List disablePadding>
-          {NAVIGATION_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const IconComponent = item.icon;
             const isActive = location.pathname === item.path || (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+            const badgeVal = getBadgeValue(item.id);
 
             return (
               <ListItem key={item.id} disablePadding sx={{ mb: 0.75 }}>
@@ -142,8 +177,8 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
                       color: isActive ? BORROW_COLORS.primary : BORROW_COLORS.textSecondary,
                     }}
                   >
-                    {item.badgeKey ? (
-                      <Badge badgeContent={3} color="primary">
+                    {badgeVal > 0 ? (
+                      <Badge badgeContent={badgeVal} color="primary">
                         <IconComponent />
                       </Badge>
                     ) : (
@@ -177,18 +212,18 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
           <Avatar
-            src={user?.photoURL || ''}
-            alt={user?.displayName || 'Admin'}
+            src={adminProfile?.avatarUrl || user?.photoURL || ''}
+            alt={adminProfile?.fullName || user?.displayName || 'Admin'}
             sx={{ width: 40, height: 40, bgcolor: BORROW_COLORS.primary, fontWeight: 700 }}
           >
-            {(user?.displayName || user?.email || 'A')[0].toUpperCase()}
+            {(adminProfile?.fullName || user?.displayName || user?.email || 'A')[0].toUpperCase()}
           </Avatar>
           <Box sx={{ minWidth: 0, flexGrow: 1 }}>
             <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
-              {user?.displayName || 'Lead Librarian'}
+              {adminProfile?.fullName || user?.displayName || 'Librarian'}
             </Typography>
             <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.primary, fontWeight: 600 }}>
-              {role || 'Admin'}
+              {adminProfile?.role || role || 'Librarian'}
             </Typography>
           </Box>
         </Box>

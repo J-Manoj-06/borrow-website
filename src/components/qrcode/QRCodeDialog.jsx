@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import PrintIcon from '@mui/icons-material/Print';
+import CodeIcon from '@mui/icons-material/Code';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { generateQRCodeSVG } from '../../services/qrCodeService';
 import { StatusChip } from '../common/CustomTable';
@@ -11,7 +12,7 @@ import CustomButton from '../common/CustomButton';
 import { useQRCode } from '../../hooks/useQRCode';
 
 export const QRCodeDialog = ({ open, onClose }) => {
-  const { selectedCopyForQr, targetBookTitle, downloadSinglePng, printLabels } = useQRCode();
+  const { selectedCopyForQr, targetBookTitle, downloadSinglePng, downloadSingleSvg, printLabels } = useQRCode();
 
   if (!selectedCopyForQr) return null;
 
@@ -28,13 +29,16 @@ export const QRCodeDialog = ({ open, onClose }) => {
           <CustomButton variant="outlined" startIcon={<PrintIcon />} onClick={() => printLabels([selectedCopyForQr], targetBookTitle)}>
             Print Label
           </CustomButton>
+          <CustomButton variant="outlined" startIcon={<CodeIcon />} onClick={() => downloadSingleSvg(selectedCopyForQr, targetBookTitle)}>
+            SVG
+          </CustomButton>
           <CustomButton
             variant="contained"
             color="primary"
             startIcon={<FileDownloadIcon />}
             onClick={() => downloadSinglePng(selectedCopyForQr, targetBookTitle)}
           >
-            Download PNG
+            PNG
           </CustomButton>
         </>
       }
@@ -64,7 +68,7 @@ export const QRCodeDialog = ({ open, onClose }) => {
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center' }}>
           <StatusChip status={selectedCopyForQr.status || 'Available'} />
           <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-            Condition: <strong>{selectedCopyForQr.condition || 'New'}</strong>
+            Condition: <strong>{selectedCopyForQr.condition || 'New'}</strong> • Location: <strong>{selectedCopyForQr.shelfLocation || 'CS-01'}</strong>
           </Typography>
         </Box>
       </Box>
