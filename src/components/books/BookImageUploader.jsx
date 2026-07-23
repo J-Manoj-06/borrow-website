@@ -42,7 +42,7 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
 
     if (onFileSelect) onFileSelect(file);
 
-    // Upload to Firebase Storage with resumable progress
+    // Upload to Cloudflare R2 / Storage with progress
     setUploading(true);
     setUploadProgress(0);
 
@@ -59,10 +59,10 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
 
       setUploading(false);
       setPreviewUrl(result.downloadURL);
-      toast.success('Book cover image uploaded & optimized (WebP)!');
+      toast.success(`Book cover image uploaded & optimized (WebP)! [${result.provider || 'R2 CDN'}]`);
       if (onUrlChange) onUrlChange(result.downloadURL);
     } catch (err) {
-      console.error('Firebase Storage upload failed:', err);
+      console.error('Storage upload failed:', err);
       setUploading(false);
       toast.error('Storage upload failed. Using local image preview.');
     }
@@ -135,7 +135,7 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
             {previewUrl ? 'Change Cover Image' : 'Upload High Resolution Cover'}
           </Typography>
           <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, mb: 2 }}>
-            Drag and drop your image file here, or click browse to upload to Firebase Storage. Images are auto-compressed to WebP format.
+            Drag and drop your image file here, or click browse to upload to Cloudflare R2 Storage. Images are auto-compressed to WebP format.
           </Typography>
 
           {fileName && (
@@ -152,7 +152,7 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
           {uploading && (
             <Box sx={{ mb: 2 }}>
               <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 700, mb: 0.5, display: 'block' }}>
-                Uploading to Storage... {uploadProgress}%
+                Uploading to Cloudflare R2... {uploadProgress}%
               </Typography>
               <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 6, borderRadius: 3 }} />
             </Box>

@@ -9,6 +9,8 @@ import {
   sanitizeFilename,
 } from './r2Validation';
 
+export { isR2Configured };
+
 /**
  * Generate public CDN / R2 URL for a given object key
  */
@@ -54,7 +56,6 @@ export const uploadImage = async (file, pathOptions = {}) => {
   }
 
   try {
-    // Infrastructure preparation for S3 PutObject request to Cloudflare R2 S3 Endpoint
     const targetUrl = `${config.s3Endpoint}/${config.bucketName}/${storagePath}`;
 
     const response = await fetch(targetUrl, {
@@ -122,10 +123,8 @@ export const deleteImage = async (fileUrlOrKey = '') => {
 export const replaceImage = async (oldFileUrlOrKey, newFile, pathOptions = {}) => {
   validateImageFile(newFile);
 
-  // Upload new image first to prevent data loss if upload fails
   const uploadResult = await uploadImage(newFile, pathOptions);
 
-  // Safely delete old image after successful new upload
   if (oldFileUrlOrKey) {
     deleteImage(oldFileUrlOrKey).catch((err) => {
       console.warn('Failed to cleanup old R2 image after replacement:', err);
@@ -141,4 +140,5 @@ export default {
   replaceImage,
   generatePublicUrl,
   validateImage,
+  isR2Configured,
 };

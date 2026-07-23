@@ -2,6 +2,7 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebas
 import { storage } from './firebaseConfig';
 import { logActivityRecord } from './activityService';
 import { compressImageToWebP } from '../imageService';
+import { uploadImage, deleteImage, isR2Configured } from '../storage/cloudflare/r2StorageService';
 
 /**
  * Generate Multi-Resolution WebP Thumbnails (Small, Medium, Large)
@@ -28,7 +29,7 @@ export const generateMultiResolutionThumbnails = async (file) => {
 };
 
 /**
- * Resumable File Upload to Firebase Storage with Progress Listener
+ * Upload File with Progress - Routes to Cloudflare R2 when configured, with Firebase Storage fallback
  */
 export const uploadFileWithProgress = (folderPath, file, options = {}, onProgress) => {
   return new Promise(async (resolve, reject) => {
@@ -46,10 +47,57 @@ export const uploadFileWithProgress = (folderPath, file, options = {}, onProgres
       const ext = processedFile.type === 'image/webp' ? '.webp' : file.name.substring(file.name.lastIndexOf('.'));
       const fileName = options.fileName || `${cleanName}_v${version}_${timestamp}${ext}`;
 
+      // Simulate progress callback
+      if (onProgress) {
+        onProgress({ progress: 25, bytesTransferred: Math.round(processedFile.size * 0.25), totalBytes: processedFile.size });
+      }
+
+      // 3. Attempt Cloudflare R2 Upload
+      const category = folderPath.split('/')[0] || 'books';
+      const entityId = folderPath.split('/')[1] || 'general';
+
+      const r2Result = await uploadImage(processedFile, {
+        category,
+        entityId,
+        filename: fileName,
+      }).catch((r2Err) => {
+        console.warn('Cloudflare R2 primary upload fallback to Firebase Storage:', r2Err);
+        return null;
+      });
+
+      if (onProgress) {
+        onProgress({ progress: 75, bytesTransferred: Math.round(processedFile.size * 0.75), totalBytes: processedFile.size });
+      }
+
+      if (r2Result && r2Result.url) {
+        if (onProgress) {
+          onProgress({ progress: 100, bytesTransferred: processedFile.size, totalBytes: processedFile.size });
+        }
+
+        // Log Activity
+        logActivityRecord({
+          user: 'Librarian',
+          action: `uploaded media file "${fileName}" to Cloudflare R2 Storage`,
+          target: fileName,
+          type: 'system',
+        }).catch(console.warn);
+
+        resolve({
+          downloadURL: r2Result.url,
+          storagePath: r2Result.key,
+          fileName,
+          size: processedFile.size,
+          contentType: processedFile.type,
+          version,
+          provider: 'Cloudflare R2',
+        });
+        return;
+      }
+
+      // Fallback: Initiate Firebase Storage upload task if R2 is not configured
       const storagePath = `${folderPath}/${fileName}`;
       const storageRef = ref(storage, storagePath);
 
-      // 3. Initiate resumable upload task
       const uploadTask = uploadBytesResumable(storageRef, processedFile, {
         contentType: processedFile.type,
         customMetadata: {
@@ -77,13 +125,11 @@ export const uploadFileWithProgress = (folderPath, file, options = {}, onProgres
           reject(error);
         },
         async () => {
-          // Upload completed successfully
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-          // Log Activity
           logActivityRecord({
             user: 'Librarian',
-            action: `uploaded media file "${fileName}" to Firebase Storage`,
+            action: `uploaded media file "${fileName}" to Storage`,
             target: fileName,
             type: 'system',
           }).catch(console.warn);
@@ -95,6 +141,7 @@ export const uploadFileWithProgress = (folderPath, file, options = {}, onProgres
             size: processedFile.size,
             contentType: processedFile.type,
             version,
+            provider: 'Firebase Storage',
           });
         }
       );
@@ -105,15 +152,25 @@ export const uploadFileWithProgress = (folderPath, file, options = {}, onProgres
 };
 
 /**
- * Soft Delete Storage File by metadata update
+ * Soft Delete Storage File (Purges from R2 and Firebase Storage)
  */
-export const softDeleteStorageFile = async (storagePath) => {
-  if (!storagePath) return;
+export const softDeleteStorageFile = async (storagePathOrUrl) => {
+  if (!storagePathOrUrl) return;
+
   try {
-    const fileRef = ref(storage, storagePath);
-    await deleteObject(fileRef);
-    console.log(`Deleted storage file ${storagePath}`);
+    // 1. Purge from Cloudflare R2
+    await deleteImage(storagePathOrUrl).catch((err) => {
+      console.warn('Cloudflare R2 file deletion warning:', err);
+    });
+
+    // 2. Purge from Firebase Storage if it's a Firebase Storage path
+    if (!storagePathOrUrl.startsWith('http')) {
+      const fileRef = ref(storage, storagePathOrUrl);
+      await deleteObject(fileRef).catch(console.warn);
+    }
+
+    console.log(`Deleted storage file ${storagePathOrUrl}`);
   } catch (err) {
-    console.warn(`Soft delete storage file failed for ${storagePath}:`, err.message);
+    console.warn(`Soft delete storage file failed for ${storagePathOrUrl}:`, err.message);
   }
 };

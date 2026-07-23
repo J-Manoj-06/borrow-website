@@ -2,17 +2,12 @@ import React, { useState, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import LinearProgress from '@mui/material/LinearProgress';
-import IconButton from '@mui/material/IconButton';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CancelIcon from '@mui/icons-material/Cancel';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import toast from 'react-hot-toast';
-import { motion } from 'framer-motion';
 
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { uploadFileWithProgress } from '../../services/firebase/storageService';
-import CustomButton from './CustomButton';
 
 export const FileUploader = ({
   folderPath = 'books/covers',
@@ -71,7 +66,7 @@ export const FileUploader = ({
 
       setCompletedUrl(result.downloadURL);
       setUploading(false);
-      toast.success('File uploaded successfully to Firebase Storage!');
+      toast.success(`File uploaded successfully to Cloudflare R2 Storage!`);
       if (onUploadSuccess) onUploadSuccess(result.downloadURL, result);
     } catch (err) {
       console.error('Upload failed:', err);
@@ -145,7 +140,7 @@ export const FileUploader = ({
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: BORROW_COLORS.success }}>
                 <CheckCircleIcon fontSize="small" />
                 <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                  Uploaded & Optimized (WebP)
+                  Uploaded to Cloudflare R2 (WebP)
                 </Typography>
               </Box>
             )}
@@ -168,7 +163,7 @@ export const FileUploader = ({
         <Box sx={{ mt: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="caption" sx={{ fontWeight: 700, color: BORROW_COLORS.primary }}>
-              Uploading to Storage... {progress}%
+              Uploading to Cloudflare R2 Storage... {progress}%
             </Typography>
           </Box>
           <LinearProgress variant="determinate" value={progress} sx={{ height: 8, borderRadius: 4 }} />
