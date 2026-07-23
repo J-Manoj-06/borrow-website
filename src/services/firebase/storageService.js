@@ -2,7 +2,7 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebas
 import { storage } from './firebaseConfig';
 import { logActivityRecord } from './activityService';
 import { compressImageToWebP } from '../imageService';
-import { uploadImage, deleteImage, isR2Configured } from '../storage/cloudflare/r2StorageService';
+import { uploadImageToCloudinary, deleteCloudinaryImage } from '../cloudinaryService';
 
 /**
  * Generate Multi-Resolution WebP Thumbnails (Small, Medium, Large)
@@ -29,72 +29,50 @@ export const generateMultiResolutionThumbnails = async (file) => {
 };
 
 /**
- * Upload File with Progress - Routes to Cloudflare R2 when configured, with Firebase Storage fallback
+ * Upload File with Progress - Uses Cloudinary as primary image storage provider
  */
 export const uploadFileWithProgress = (folderPath, file, options = {}, onProgress) => {
   return new Promise(async (resolve, reject) => {
     try {
-      // 1. Convert image to WebP format if it's an image
+      // If it's an image, attempt Cloudinary upload first
+      if (file.type.startsWith('image/')) {
+        try {
+          const res = await uploadImageToCloudinary(file, folderPath, onProgress);
+
+          const fileName = file.name || 'image.webp';
+          logActivityRecord({
+            user: 'Librarian',
+            action: `uploaded media file "${fileName}" to Cloudinary Storage`,
+            target: fileName,
+            type: 'system',
+          }).catch(console.warn);
+
+          resolve({
+            downloadURL: res.secure_url,
+            storagePath: res.public_id,
+            fileName,
+            size: res.bytes || file.size,
+            contentType: file.type,
+            provider: 'Cloudinary',
+          });
+          return;
+        } catch (cloudinaryErr) {
+          console.warn('Cloudinary upload warning, using Firebase Storage fallback:', cloudinaryErr.message);
+        }
+      }
+
+      // Fallback: Firebase Storage upload task
       let processedFile = file;
       if (file.type.startsWith('image/')) {
         processedFile = await compressImageToWebP(file, 800, 0.85);
       }
 
-      // 2. Build unique filename
       const timestamp = Date.now();
       const version = options.version || 1;
       const cleanName = (file.name || 'file').replace(/\.[^/.]+$/, '');
       const ext = processedFile.type === 'image/webp' ? '.webp' : file.name.substring(file.name.lastIndexOf('.'));
       const fileName = options.fileName || `${cleanName}_v${version}_${timestamp}${ext}`;
 
-      // Simulate progress callback
-      if (onProgress) {
-        onProgress({ progress: 25, bytesTransferred: Math.round(processedFile.size * 0.25), totalBytes: processedFile.size });
-      }
-
-      // 3. Attempt Cloudflare R2 Upload
-      const category = folderPath.split('/')[0] || 'books';
-      const entityId = folderPath.split('/')[1] || 'general';
-
-      const r2Result = await uploadImage(processedFile, {
-        category,
-        entityId,
-        filename: fileName,
-      }).catch((r2Err) => {
-        console.warn('Cloudflare R2 primary upload fallback to Firebase Storage:', r2Err);
-        return null;
-      });
-
-      if (onProgress) {
-        onProgress({ progress: 75, bytesTransferred: Math.round(processedFile.size * 0.75), totalBytes: processedFile.size });
-      }
-
-      if (r2Result && r2Result.url) {
-        if (onProgress) {
-          onProgress({ progress: 100, bytesTransferred: processedFile.size, totalBytes: processedFile.size });
-        }
-
-        // Log Activity
-        logActivityRecord({
-          user: 'Librarian',
-          action: `uploaded media file "${fileName}" to Cloudflare R2 Storage`,
-          target: fileName,
-          type: 'system',
-        }).catch(console.warn);
-
-        resolve({
-          downloadURL: r2Result.url,
-          storagePath: r2Result.key,
-          fileName,
-          size: processedFile.size,
-          contentType: processedFile.type,
-          version,
-          provider: 'Cloudflare R2',
-        });
-        return;
-      }
-
-      // Fallback: Initiate Firebase Storage upload task if R2 is not configured
       const storagePath = `${folderPath}/${fileName}`;
       const storageRef = ref(storage, storagePath);
 
@@ -129,7 +107,7 @@ export const uploadFileWithProgress = (folderPath, file, options = {}, onProgres
 
           logActivityRecord({
             user: 'Librarian',
-            action: `uploaded media file "${fileName}" to Storage`,
+            action: `uploaded media file "${fileName}" to Firebase Storage`,
             target: fileName,
             type: 'system',
           }).catch(console.warn);
@@ -152,16 +130,14 @@ export const uploadFileWithProgress = (folderPath, file, options = {}, onProgres
 };
 
 /**
- * Soft Delete Storage File (Purges from R2 and Firebase Storage)
+ * Soft Delete Storage File (Purges from Cloudinary and Firebase Storage)
  */
 export const softDeleteStorageFile = async (storagePathOrUrl) => {
   if (!storagePathOrUrl) return;
 
   try {
-    // 1. Purge from Cloudflare R2
-    await deleteImage(storagePathOrUrl).catch((err) => {
-      console.warn('Cloudflare R2 file deletion warning:', err);
-    });
+    // 1. Purge from Cloudinary
+    await deleteCloudinaryImage(storagePathOrUrl).catch(console.warn);
 
     // 2. Purge from Firebase Storage if it's a Firebase Storage path
     if (!storagePathOrUrl.startsWith('http')) {

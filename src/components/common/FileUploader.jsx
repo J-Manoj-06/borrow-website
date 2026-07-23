@@ -66,10 +66,10 @@ export const FileUploader = ({
 
       setCompletedUrl(result.downloadURL);
       setUploading(false);
-      toast.success(`File uploaded successfully to Cloudflare R2 Storage!`);
+      toast.success(`File uploaded successfully to Cloudinary Storage!`);
       if (onUploadSuccess) onUploadSuccess(result.downloadURL, result);
     } catch (err) {
-      console.error('Upload failed:', err);
+      console.error('Cloudinary upload failed:', err);
       setUploading(false);
       toast.error('Upload failed. Please try again.');
     }
@@ -140,7 +140,7 @@ export const FileUploader = ({
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: BORROW_COLORS.success }}>
                 <CheckCircleIcon fontSize="small" />
                 <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                  Uploaded to Cloudflare R2 (WebP)
+                  Uploaded to Cloudinary (WebP)
                 </Typography>
               </Box>
             )}
@@ -163,7 +163,7 @@ export const FileUploader = ({
         <Box sx={{ mt: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="caption" sx={{ fontWeight: 700, color: BORROW_COLORS.primary }}>
-              Uploading to Cloudflare R2 Storage... {progress}%
+              Uploading to Cloudinary Storage... {progress}%
             </Typography>
           </Box>
           <LinearProgress variant="determinate" value={progress} sx={{ height: 8, borderRadius: 4 }} />
