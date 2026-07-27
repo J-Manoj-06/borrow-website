@@ -2,56 +2,81 @@ import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Avatar from '@mui/material/Avatar';
-import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
-import AssignmentReturnedIcon from '@mui/icons-material/AssignmentReturned';
-import AutorenewIcon from '@mui/icons-material/Autorenew';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import format from 'date-fns/format';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
-import CustomTable, { StatusChip } from '../common/CustomTable';
+import CustomTable from '../common/CustomTable';
+import StatusBadge from '../common/StatusBadge';
 import { useTransactions } from '../../hooks/useTransactions';
 
-export const TransactionTable = () => {
+export const TransactionTable = ({
+  selectedIds = [],
+  onToggleSelect,
+  onToggleSelectAll,
+}) => {
   const {
     filteredTransactions,
     loading,
     selectTransactionForDetails,
     openReturnModal,
-    renewBook,
   } = useTransactions();
 
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
-  const handleRenewClick = async (row) => {
-    await renewBook(row.id || row.transactionId, 14, 'Librarian');
-  };
+  const allPageIds = filteredTransactions.slice(page * rowsPerPage, (page + 1) * rowsPerPage).map((t) => t.id);
+  const isAllPageSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.includes(id));
 
   const columns = [
     {
+      id: 'select',
+      label: (
+        <Checkbox
+          size="small"
+          checked={isAllPageSelected}
+          indeterminate={selectedIds.length > 0 && !isAllPageSelected}
+          onChange={() => onToggleSelectAll && onToggleSelectAll(allPageIds)}
+          sx={{ p: 0, color: BORROW_COLORS.textMuted }}
+        />
+      ),
+      minWidth: 40,
+      width: 40,
+      format: (_, row) => (
+        <Checkbox
+          size="small"
+          checked={selectedIds.includes(row.id)}
+          onChange={() => onToggleSelect && onToggleSelect(row.id)}
+          onClick={(e) => e.stopPropagation()}
+          sx={{ p: 0, color: BORROW_COLORS.textMuted }}
+        />
+      ),
+    },
+    {
       id: 'studentName',
-      label: 'Student Borrower',
-      minWidth: 220,
+      label: 'Student',
+      minWidth: 180,
       format: (val, row) => (
         <Box
           onClick={() => selectTransactionForDetails(row)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, cursor: 'pointer' }}
         >
           <Avatar
             src={row.studentAvatar || ''}
             alt={val}
-            sx={{ width: 36, height: 36, bgcolor: BORROW_COLORS.primary, fontWeight: 700, fontSize: '0.85rem' }}
+            sx={{ width: 32, height: 32, bgcolor: BORROW_COLORS.primary, fontWeight: 600, fontSize: '0.8125rem' }}
           >
-            {val ? val[0] : 'S'}
+            {(val || 'S')[0]}
           </Avatar>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, fontSize: '0.84375rem', color: BORROW_COLORS.textPrimary }}>
               {val}
             </Typography>
-            <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 600 }}>
-              {row.registerNumber}
+            <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
+              {row.registerNumber || row.studentId}
             </Typography>
           </Box>
         </Box>
@@ -59,18 +84,18 @@ export const TransactionTable = () => {
     },
     {
       id: 'bookTitle',
-      label: 'Book & Physical Copy ID',
-      minWidth: 260,
+      label: 'Book Information',
+      minWidth: 220,
       format: (val, row) => (
         <Box
           onClick={() => selectTransactionForDetails(row)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, cursor: 'pointer' }}
         >
           <Box
             sx={{
-              width: 32,
-              height: 44,
-              borderRadius: '6px',
+              width: 28,
+              height: 40,
+              borderRadius: '4px',
               overflow: 'hidden',
               flexShrink: 0,
               backgroundColor: '#F1F5F9',
@@ -84,11 +109,11 @@ export const TransactionTable = () => {
             />
           </Box>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, fontSize: '0.84375rem', color: BORROW_COLORS.textPrimary }}>
               {val}
             </Typography>
-            <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.primary, fontWeight: 700, display: 'block' }}>
-              Copy: {row.bookCopyId}
+            <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
+              Copy ID: {row.copyId || row.bookCopyId || 'CPY-DEFAULT'}
             </Typography>
           </Box>
         </Box>
@@ -97,113 +122,72 @@ export const TransactionTable = () => {
     {
       id: 'issueDate',
       label: 'Issue Date',
-      minWidth: 130,
+      minWidth: 120,
       format: (val) => (
-        <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 600 }}>
-          {val ? format(new Date(val), 'dd MMM yyyy') : 'N/A'}
+        <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 500 }}>
+          {val ? format(new Date(val), 'dd MMM yyyy') : 'Today'}
         </Typography>
       ),
     },
     {
       id: 'dueDate',
       label: 'Due Date',
-      minWidth: 130,
-      format: (val, row) => (
-        <Typography
-          variant="caption"
-          sx={{
-            fontWeight: 700,
-            color: row.isOverdue ? BORROW_COLORS.error : BORROW_COLORS.textPrimary,
-          }}
-        >
-          {val ? format(new Date(val), 'dd MMM yyyy') : 'N/A'}
-        </Typography>
-      ),
-    },
-    {
-      id: 'daysRemaining',
-      label: 'Loan Progress',
-      minWidth: 140,
-      format: (_, row) => {
-        if (row.computedStatus === 'Returned') {
-          return (
-            <Chip
-              label="Returned"
-              size="small"
-              sx={{ backgroundColor: BORROW_COLORS.successLight, color: BORROW_COLORS.success, fontWeight: 700, fontSize: '0.725rem' }}
-            />
-          );
-        }
-        if (row.isOverdue) {
-          return (
-            <Chip
-              label={`${row.daysOverdue} DAYS OVERDUE`}
-              size="small"
-              sx={{ backgroundColor: BORROW_COLORS.errorLight, color: BORROW_COLORS.error, fontWeight: 800, fontSize: '0.725rem' }}
-            />
-          );
-        }
+      minWidth: 120,
+      format: (val, row) => {
+        const isOverdue = val && new Date(val) < new Date() && (row.status === 'Issued' || row.status === 'Borrowed');
         return (
-          <Chip
-            label={`${row.daysRemaining} days left`}
-            size="small"
-            sx={{ backgroundColor: BORROW_COLORS.infoLight, color: BORROW_COLORS.info, fontWeight: 700, fontSize: '0.725rem' }}
-          />
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 600,
+              color: isOverdue ? BORROW_COLORS.error : BORROW_COLORS.textSecondary,
+            }}
+          >
+            {val ? format(new Date(val), 'dd MMM yyyy') : '14 Days'}
+          </Typography>
         );
       },
     },
     {
       id: 'status',
       label: 'Status',
-      minWidth: 120,
-      format: (_, row) => <StatusChip status={row.computedStatus || row.status} />,
+      minWidth: 100,
+      format: (val, row) => {
+        const isOverdue = row.dueDate && new Date(row.dueDate) < new Date() && (val === 'Issued' || val === 'Borrowed');
+        return <StatusBadge status={isOverdue ? 'Overdue' : val || 'Issued'} size="small" />;
+      },
     },
     {
       id: 'actions',
       label: 'Actions',
-      minWidth: 140,
+      minWidth: 90,
       align: 'right',
       format: (_, row) => (
         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-          {(row.computedStatus === 'Issued' || row.computedStatus === 'Overdue') && (
-            <>
-              <Tooltip title="Renew Loan (+14 Days)">
-                <IconButton
-                  size="small"
-                  onClick={() => handleRenewClick(row)}
-                  sx={{
-                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                    color: BORROW_COLORS.primary,
-                    '&:hover': { backgroundColor: 'rgba(37, 99, 235, 0.15)' },
-                  }}
-                >
-                  <AutorenewIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-
-              <Tooltip title="Mark Book Returned">
-                <IconButton
-                  size="small"
-                  onClick={() => openReturnModal(row)}
-                  sx={{
-                    backgroundColor: BORROW_COLORS.successLight,
-                    color: BORROW_COLORS.success,
-                    '&:hover': { backgroundColor: '#BBF7D0' },
-                  }}
-                >
-                  <AssignmentReturnedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </>
+          {(row.status === 'Issued' || row.status === 'Borrowed') && (
+            <Tooltip title="Process Return Check-in">
+              <IconButton
+                size="small"
+                onClick={() => openReturnModal(row)}
+                sx={{
+                  backgroundColor: BORROW_COLORS.successLight,
+                  color: BORROW_COLORS.success,
+                  '&:hover': { backgroundColor: '#BBF7D0' },
+                  p: 0.5,
+                }}
+              >
+                <AssignmentReturnIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
           )}
 
-          <Tooltip title="View Transaction Audit Trail">
+          <Tooltip title="View Transaction Details & History">
             <IconButton
               size="small"
               onClick={() => selectTransactionForDetails(row)}
-              sx={{ color: BORROW_COLORS.textSecondary, '&:hover': { backgroundColor: '#F1F5F9' } }}
+              sx={{ color: BORROW_COLORS.textSecondary, p: 0.5, '&:hover': { backgroundColor: BORROW_COLORS.background } }}
             >
-              <VisibilityOutlinedIcon fontSize="small" />
+              <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
         </Box>
@@ -224,8 +208,8 @@ export const TransactionTable = () => {
         setPage(0);
       }}
       emptyType="activity"
-      emptyTitle="No Borrow Transactions"
-      emptyDescription="There are no active or historical checkouts matching your filter criteria."
+      emptyTitle="No Circulation Transactions Found"
+      emptyDescription="There are currently no checkout or return records matching your filter criteria."
     />
   );
 };

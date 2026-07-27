@@ -4,18 +4,19 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Avatar from '@mui/material/Avatar';
-import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
 import Grid from '@mui/material/Grid';
 import CloseIcon from '@mui/icons-material/Close';
 import AssignmentReturnedIcon from '@mui/icons-material/AssignmentReturned';
 import format from 'date-fns/format';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
-import { StatusChip } from '../common/CustomTable';
+import StatusBadge from '../common/StatusBadge';
 import CustomButton from '../common/CustomButton';
 
 export const TransactionDrawer = ({ open, onClose, transaction, onReturn }) => {
   if (!transaction) return null;
+
+  const status = transaction.computedStatus || transaction.status || 'Issued';
+  const isOverdue = transaction.dueDate && new Date(transaction.dueDate) < new Date() && status !== 'Returned';
 
   return (
     <Drawer
@@ -24,16 +25,16 @@ export const TransactionDrawer = ({ open, onClose, transaction, onReturn }) => {
       onClose={onClose}
       PaperProps={{
         sx: {
-          width: { xs: '100%', sm: 540, md: 600 },
+          width: { xs: '100%', sm: 520, md: 580 },
           p: 0,
           backgroundColor: BORROW_COLORS.surface,
         },
       }}
     >
-      {/* Header */}
+      {/* Header Bar */}
       <Box
         sx={{
-          p: 3,
+          p: 2.5,
           borderBottom: `1px solid ${BORROW_COLORS.border}`,
           display: 'flex',
           alignItems: 'center',
@@ -45,26 +46,26 @@ export const TransactionDrawer = ({ open, onClose, transaction, onReturn }) => {
         }}
       >
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary }}>
-            Transaction Audit Record
+          <Typography variant="h5" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+            Circulation Transaction Details
           </Typography>
-          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
+          <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted }}>
             ID: {transaction.id || transaction.transactionId}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} sx={{ color: BORROW_COLORS.textSecondary }}>
-          <CloseIcon />
+        <IconButton size="small" onClick={onClose} sx={{ color: BORROW_COLORS.textMuted }}>
+          <CloseIcon sx={{ fontSize: 20 }} />
         </IconButton>
       </Box>
 
-      {/* Content */}
-      <Box sx={{ p: 3, overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {/* Main Drawer Body */}
+      <Box sx={{ p: 2.5, overflowY: 'auto', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Status Header Bar */}
         <Box
           sx={{
             p: 2,
-            borderRadius: '16px',
-            backgroundColor: '#F8FAFC',
+            borderRadius: '10px',
+            backgroundColor: BORROW_COLORS.background,
             border: `1px solid ${BORROW_COLORS.border}`,
             display: 'flex',
             alignItems: 'center',
@@ -72,93 +73,91 @@ export const TransactionDrawer = ({ open, onClose, transaction, onReturn }) => {
           }}
         >
           <Box>
-            <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 600 }}>
-              TRANSACTION STATUS
+            <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted, fontWeight: 600, fontSize: '0.6875rem' }}>
+              CIRCULATION STATUS
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-              <StatusChip status={transaction.computedStatus || transaction.status} />
-              {transaction.condition && (
-                <Chip label={`Condition: ${transaction.condition}`} size="small" variant="outlined" sx={{ fontWeight: 700 }} />
-              )}
+              <StatusBadge status={isOverdue ? 'Overdue' : status} size="small" />
+              {transaction.condition && <StatusBadge status={transaction.condition} size="small" />}
             </Box>
           </Box>
 
-          {(transaction.computedStatus === 'Issued' || transaction.computedStatus === 'Overdue') && (
+          {(status === 'Issued' || status === 'Borrowed' || isOverdue) && (
             <CustomButton
-              variant="contained"
-              color="success"
+              variant="primary"
               size="small"
-              startIcon={<AssignmentReturnedIcon />}
+              startIcon={<AssignmentReturnedIcon sx={{ fontSize: 16 }} />}
               onClick={() => {
                 onClose();
                 onReturn(transaction);
               }}
+              sx={{ backgroundColor: BORROW_COLORS.success, '&:hover': { backgroundColor: '#15803D' } }}
             >
-              Mark Returned
+              Process Check-in Return
             </CustomButton>
           )}
         </Box>
 
-        {/* Student Section */}
+        {/* Student Information */}
         <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textSecondary, mb: 1.5, letterSpacing: 0.5 }}>
-            STUDENT BORROWER DETAILS
+          <Typography variant="caption" sx={{ fontWeight: 700, color: BORROW_COLORS.textMuted, mb: 1, display: 'block', letterSpacing: '0.05em' }}>
+            STUDENT DETAILS
           </Typography>
 
           <Box
             sx={{
-              p: 2.5,
-              borderRadius: '16px',
+              p: 2,
+              borderRadius: '10px',
               border: `1px solid ${BORROW_COLORS.border}`,
               backgroundColor: BORROW_COLORS.surface,
               display: 'flex',
               alignItems: 'center',
-              gap: 2,
+              gap: 1.5,
             }}
           >
             <Avatar
               src={transaction.studentAvatar || ''}
               alt={transaction.studentName}
-              sx={{ width: 52, height: 52, bgcolor: BORROW_COLORS.primary, fontWeight: 700 }}
+              sx={{ width: 44, height: 44, bgcolor: BORROW_COLORS.primary, fontWeight: 600, fontSize: '1rem' }}
             >
-              {transaction.studentName[0]}
+              {(transaction.studentName || 'S')[0]}
             </Avatar>
 
             <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-              <Typography variant="h5" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary }}>
                 {transaction.studentName}
               </Typography>
-              <Typography variant="body2" sx={{ color: BORROW_COLORS.primary, fontWeight: 700 }}>
-                Reg No: {transaction.registerNumber}
+              <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 600, display: 'block' }}>
+                Reg No: {transaction.registerNumber || transaction.studentId}
               </Typography>
-              <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block', mt: 0.25 }}>
-                {transaction.department || 'Computer Science'} • {transaction.year || '3rd Year'}
+              <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
+                {transaction.department || 'Computer Science'}
               </Typography>
             </Box>
           </Box>
         </Box>
 
-        {/* Book & Physical Copy Section */}
+        {/* Book Information */}
         <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textSecondary, mb: 1.5, letterSpacing: 0.5 }}>
-            BOOK & PHYSICAL COPY TRACKING
+          <Typography variant="caption" sx={{ fontWeight: 700, color: BORROW_COLORS.textMuted, mb: 1, display: 'block', letterSpacing: '0.05em' }}>
+            ISSUED BOOK DETAILS
           </Typography>
 
           <Box
             sx={{
-              p: 2.5,
-              borderRadius: '16px',
+              p: 2,
+              borderRadius: '10px',
               border: `1px solid ${BORROW_COLORS.border}`,
               backgroundColor: BORROW_COLORS.surface,
               display: 'flex',
-              gap: 2,
+              gap: 1.5,
             }}
           >
             <Box
               sx={{
-                width: 80,
-                height: 110,
-                borderRadius: '8px',
+                width: 64,
+                height: 88,
+                borderRadius: '6px',
                 overflow: 'hidden',
                 flexShrink: 0,
                 border: `1px solid ${BORROW_COLORS.border}`,
@@ -173,37 +172,37 @@ export const TransactionDrawer = ({ open, onClose, transaction, onReturn }) => {
             </Box>
 
             <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-              <Typography variant="h5" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary, mb: 0.5 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary, mb: 0.25 }}>
                 {transaction.bookTitle}
               </Typography>
               <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, mb: 1 }}>
-                By {transaction.bookAuthor}
+                By {transaction.bookAuthor || 'Unknown Author'}
               </Typography>
-              <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 800, display: 'block' }}>
-                PHYSICAL COPY ID: {transaction.bookCopyId}
+              <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 600, display: 'block' }}>
+                COPY ID: {transaction.bookCopyId || transaction.copyId || 'CPY-DEFAULT'}
               </Typography>
             </Box>
           </Box>
         </Box>
 
-        {/* Key Timestamps Grid */}
+        {/* Key Dates Grid */}
         <Grid container spacing={2}>
           <Grid item xs={6}>
-            <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>CHECKOUT ISSUE DATE</Typography>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted }}>CHECKOUT ISSUE DATE</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
               {transaction.issueDate ? format(new Date(transaction.issueDate), 'dd MMM yyyy, hh:mm a') : 'N/A'}
             </Typography>
           </Grid>
           <Grid item xs={6}>
-            <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>RETURN DUE DATE</Typography>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: transaction.isOverdue ? BORROW_COLORS.error : BORROW_COLORS.primary }}>
-              {transaction.dueDate ? format(new Date(transaction.dueDate), 'dd MMM yyyy') : 'N/A'}
+            <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted }}>RETURN DUE DATE</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: isOverdue ? BORROW_COLORS.error : BORROW_COLORS.primary }}>
+              {transaction.dueDate ? format(new Date(transaction.dueDate), 'dd MMM yyyy') : '14 Days'}
             </Typography>
           </Grid>
           {transaction.returnDate && (
             <Grid item xs={12}>
-              <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>ACTUAL RETURN DATE</Typography>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.success }}>
+              <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted }}>ACTUAL RETURN DATE</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: BORROW_COLORS.success }}>
                 {format(new Date(transaction.returnDate), 'dd MMM yyyy, hh:mm a')} (Processed by {transaction.returnedBy || 'Admin'})
               </Typography>
             </Grid>
@@ -212,34 +211,13 @@ export const TransactionDrawer = ({ open, onClose, transaction, onReturn }) => {
 
         {/* Notes */}
         {transaction.notes && (
-          <Box sx={{ p: 2, borderRadius: '12px', backgroundColor: '#F8FAFC', border: `1px solid ${BORROW_COLORS.border}` }}>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: BORROW_COLORS.textSecondary }}>
+          <Box sx={{ p: 1.75, borderRadius: '8px', backgroundColor: BORROW_COLORS.background, border: `1px solid ${BORROW_COLORS.border}` }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: BORROW_COLORS.textMuted }}>
               LIBRARIAN NOTES
             </Typography>
-            <Typography variant="body2" sx={{ color: BORROW_COLORS.textPrimary, mt: 0.5, lineHeight: 1.6 }}>
-              {transaction.notes}
+            <Typography variant="body2" sx={{ color: BORROW_COLORS.textPrimary, mt: 0.5 }}>
+              "{transaction.notes}"
             </Typography>
-          </Box>
-        )}
-
-        {/* Timeline History */}
-        {transaction.history?.length > 0 && (
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 700, color: BORROW_COLORS.textSecondary, mb: 1, display: 'block' }}>
-              TRANSACTION HISTORY LOG
-            </Typography>
-            <Box sx={{ p: 2, borderRadius: '12px', backgroundColor: '#F8FAFC', border: `1px solid ${BORROW_COLORS.border}` }}>
-              {transaction.history.map((hist, idx) => (
-                <Box key={idx} sx={{ mb: idx === transaction.history.length - 1 ? 0 : 1.5 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
-                    {hist.event}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-                    {format(new Date(hist.timestamp), 'dd MMM yyyy, hh:mm a')} • {hist.actor}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
           </Box>
         )}
       </Box>

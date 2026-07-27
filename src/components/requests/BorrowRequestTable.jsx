@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Avatar from '@mui/material/Avatar';
-import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import CheckIcon from '@mui/icons-material/Check';
@@ -10,10 +10,15 @@ import CloseIcon from '@mui/icons-material/Close';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import format from 'date-fns/format';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
-import CustomTable, { StatusChip } from '../common/CustomTable';
+import CustomTable from '../common/CustomTable';
+import StatusBadge from '../common/StatusBadge';
 import { useBorrowRequests } from '../../hooks/useBorrowRequests';
 
-export const BorrowRequestTable = () => {
+export const BorrowRequestTable = ({
+  selectedIds = [],
+  onToggleSelect,
+  onToggleSelectAll,
+}) => {
   const {
     filteredRequests,
     loading,
@@ -23,31 +28,57 @@ export const BorrowRequestTable = () => {
   } = useBorrowRequests();
 
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
+  const allPageIds = filteredRequests.slice(page * rowsPerPage, (page + 1) * rowsPerPage).map((r) => r.id);
+  const isAllPageSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.includes(id));
 
   const columns = [
     {
+      id: 'select',
+      label: (
+        <Checkbox
+          size="small"
+          checked={isAllPageSelected}
+          indeterminate={selectedIds.length > 0 && !isAllPageSelected}
+          onChange={() => onToggleSelectAll && onToggleSelectAll(allPageIds)}
+          sx={{ p: 0, color: BORROW_COLORS.textMuted }}
+        />
+      ),
+      minWidth: 40,
+      width: 40,
+      format: (_, row) => (
+        <Checkbox
+          size="small"
+          checked={selectedIds.includes(row.id)}
+          onChange={() => onToggleSelect && onToggleSelect(row.id)}
+          onClick={(e) => e.stopPropagation()}
+          sx={{ p: 0, color: BORROW_COLORS.textMuted }}
+        />
+      ),
+    },
+    {
       id: 'studentName',
       label: 'Student Information',
-      minWidth: 220,
+      minWidth: 200,
       format: (val, row) => (
         <Box
           onClick={() => selectRequestForDetails(row)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, cursor: 'pointer' }}
         >
           <Avatar
             src={row.studentAvatar || ''}
             alt={val}
-            sx={{ width: 36, height: 36, bgcolor: BORROW_COLORS.primary, fontWeight: 700, fontSize: '0.85rem' }}
+            sx={{ width: 32, height: 32, bgcolor: BORROW_COLORS.primary, fontWeight: 600, fontSize: '0.8125rem' }}
           >
-            {val[0]}
+            {(val || 'S')[0]}
           </Avatar>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, fontSize: '0.84375rem', color: BORROW_COLORS.textPrimary }}>
               {val}
             </Typography>
-            <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 600 }}>
-              {row.registerNumber}
+            <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
+              {row.registerNumber} • {row.department || 'CS'}
             </Typography>
           </Box>
         </Box>
@@ -56,17 +87,17 @@ export const BorrowRequestTable = () => {
     {
       id: 'bookTitle',
       label: 'Requested Book',
-      minWidth: 260,
+      minWidth: 220,
       format: (val, row) => (
         <Box
           onClick={() => selectRequestForDetails(row)}
-          sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1.25, cursor: 'pointer' }}
         >
           <Box
             sx={{
-              width: 32,
-              height: 44,
-              borderRadius: '6px',
+              width: 28,
+              height: 40,
+              borderRadius: '4px',
               overflow: 'hidden',
               flexShrink: 0,
               backgroundColor: '#F1F5F9',
@@ -80,11 +111,11 @@ export const BorrowRequestTable = () => {
             />
           </Box>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, fontSize: '0.84375rem', color: BORROW_COLORS.textPrimary }}>
               {val}
             </Typography>
             <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
-              by {row.bookAuthor}
+              by {row.bookAuthor || 'Unknown Author'}
             </Typography>
           </Box>
         </Box>
@@ -93,40 +124,33 @@ export const BorrowRequestTable = () => {
     {
       id: 'requestDate',
       label: 'Requested On',
-      minWidth: 150,
+      minWidth: 140,
       format: (val) => (
-        <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 600 }}>
-          {val ? format(new Date(val), 'dd MMM yyyy, hh:mm a') : 'N/A'}
+        <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 500 }}>
+          {val ? format(new Date(val), 'dd MMM yyyy, hh:mm a') : 'Today'}
         </Typography>
       ),
     },
     {
-      id: 'status',
-      label: 'Status',
-      minWidth: 120,
-      format: (val) => <StatusChip status={val} />,
-    },
-    {
       id: 'priority',
       label: 'Priority',
+      minWidth: 90,
+      format: (val) => <StatusBadge status={val || 'Normal'} size="small" />,
+    },
+    {
+      id: 'status',
+      label: 'Status',
       minWidth: 100,
-      format: (val) => (
-        <Chip
-          label={val || 'Normal'}
-          size="small"
-          color={val === 'High' ? 'warning' : 'default'}
-          sx={{ fontWeight: 700, fontSize: '0.725rem' }}
-        />
-      ),
+      format: (val) => <StatusBadge status={val || 'Pending'} size="small" />,
     },
     {
       id: 'actions',
-      label: 'Actions',
-      minWidth: 130,
+      label: 'Quick Actions',
+      minWidth: 110,
       align: 'right',
       format: (_, row) => (
         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-          {row.status === 'Pending' ? (
+          {row.status === 'Pending' && (
             <>
               <Tooltip title="Approve Request">
                 <IconButton
@@ -136,9 +160,10 @@ export const BorrowRequestTable = () => {
                     backgroundColor: BORROW_COLORS.successLight,
                     color: BORROW_COLORS.success,
                     '&:hover': { backgroundColor: '#BBF7D0' },
+                    p: 0.5,
                   }}
                 >
-                  <CheckIcon fontSize="small" />
+                  <CheckIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
 
@@ -150,21 +175,22 @@ export const BorrowRequestTable = () => {
                     backgroundColor: BORROW_COLORS.errorLight,
                     color: BORROW_COLORS.error,
                     '&:hover': { backgroundColor: '#FCA5A5' },
+                    p: 0.5,
                   }}
                 >
-                  <CloseIcon fontSize="small" />
+                  <CloseIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
             </>
-          ) : null}
+          )}
 
-          <Tooltip title="View Full Request Details">
+          <Tooltip title="View Request Details & Timeline">
             <IconButton
               size="small"
               onClick={() => selectRequestForDetails(row)}
-              sx={{ color: BORROW_COLORS.textSecondary, '&:hover': { backgroundColor: '#F1F5F9' } }}
+              sx={{ color: BORROW_COLORS.textSecondary, p: 0.5, '&:hover': { backgroundColor: BORROW_COLORS.background } }}
             >
-              <VisibilityOutlinedIcon fontSize="small" />
+              <VisibilityOutlinedIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
         </Box>
