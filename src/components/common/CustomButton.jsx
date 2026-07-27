@@ -9,51 +9,104 @@ const MotionButton = motion.create(Button);
 export const CustomButton = ({
   children,
   loading = false,
-  variant = 'contained',
+  variant = 'primary', // 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost' | 'contained' | 'outlined' | 'text'
   color = 'primary',
   startIcon,
   endIcon,
   disabled,
+  size = 'medium',
   sx = {},
-  gradient = false,
   ...props
 }) => {
-  const gradientStyles = gradient || (variant === 'contained' && color === 'primary')
-    ? {
-        background: BORROW_COLORS.primaryGradient,
-        color: '#FFFFFF',
-        '&:hover': {
-          background: BORROW_COLORS.primaryGradientHover,
-        },
-      }
-    : {};
+  // Determine Button Hierarchy Styles
+  let muiVariant = 'contained';
+  let customStyles = {};
+
+  if (variant === 'primary' || (variant === 'contained' && color === 'primary')) {
+    muiVariant = 'contained';
+    customStyles = {
+      backgroundColor: BORROW_COLORS.primary,
+      color: '#FFFFFF',
+      boxShadow: 'none',
+      '&:hover': {
+        backgroundColor: BORROW_COLORS.primaryDark,
+        boxShadow: 'none',
+      },
+    };
+  } else if (variant === 'secondary') {
+    muiVariant = 'contained';
+    customStyles = {
+      backgroundColor: '#F1F5F9',
+      color: BORROW_COLORS.textPrimary,
+      boxShadow: 'none',
+      '&:hover': {
+        backgroundColor: '#E2E8F0',
+        boxShadow: 'none',
+      },
+    };
+  } else if (variant === 'outline' || variant === 'outlined') {
+    muiVariant = 'outlined';
+    customStyles = {
+      backgroundColor: 'transparent',
+      borderColor: BORROW_COLORS.border,
+      color: BORROW_COLORS.textPrimary,
+      boxShadow: 'none',
+      '&:hover': {
+        borderColor: BORROW_COLORS.textMuted,
+        backgroundColor: BORROW_COLORS.background,
+        boxShadow: 'none',
+      },
+    };
+  } else if (variant === 'danger') {
+    muiVariant = 'contained';
+    customStyles = {
+      backgroundColor: BORROW_COLORS.error,
+      color: '#FFFFFF',
+      boxShadow: 'none',
+      '&:hover': {
+        backgroundColor: '#B91C1C',
+        boxShadow: 'none',
+      },
+    };
+  } else if (variant === 'ghost' || variant === 'text') {
+    muiVariant = 'text';
+    customStyles = {
+      backgroundColor: 'transparent',
+      color: BORROW_COLORS.textSecondary,
+      boxShadow: 'none',
+      '&:hover': {
+        backgroundColor: '#F1F5F9',
+        color: BORROW_COLORS.textPrimary,
+      },
+    };
+  }
 
   return (
     <MotionButton
-      whileHover={{ scale: disabled || loading ? 1 : 1.02 }}
-      whileTap={{ scale: disabled || loading ? 1 : 0.98 }}
-      variant={variant}
-      color={color}
+      whileHover={{ scale: disabled || loading ? 1 : 1.01 }}
+      whileTap={{ scale: disabled || loading ? 1 : 0.99 }}
+      variant={muiVariant}
       disabled={disabled || loading}
+      size={size}
       startIcon={!loading ? startIcon : null}
       endIcon={!loading ? endIcon : null}
       sx={{
-        position: 'relative',
-        fontWeight: 600,
-        borderRadius: '10px',
-        px: 3,
-        py: 1.25,
-        boxShadow: variant === 'contained' ? '0px 4px 12px rgba(37, 99, 235, 0.2)' : 'none',
-        ...gradientStyles,
+        fontWeight: 500,
+        borderRadius: '8px',
+        px: size === 'small' ? 1.5 : size === 'large' ? 2.5 : 2,
+        py: size === 'small' ? 0.5 : size === 'large' ? 1.25 : 0.85,
+        fontSize: size === 'small' ? '0.8125rem' : '0.875rem',
+        textTransform: 'none',
+        ...customStyles,
         ...sx,
       }}
       {...props}
     >
       {loading && (
         <CircularProgress
-          size={20}
+          size={16}
           sx={{
-            color: variant === 'contained' ? '#FFFFFF' : BORROW_COLORS.primary,
+            color: (variant === 'primary' || variant === 'danger') ? '#FFFFFF' : BORROW_COLORS.primary,
             mr: 1,
           }}
         />

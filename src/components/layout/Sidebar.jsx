@@ -12,7 +12,6 @@ import Avatar from '@mui/material/Avatar';
 import Badge from '@mui/material/Badge';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
-import { motion } from 'framer-motion';
 import { NAVIGATION_ITEMS } from '../../constants/navigation';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { useAuth } from '../../hooks/useAuth';
@@ -21,9 +20,7 @@ import { usePendingBorrowRequests } from '../../hooks/usePendingBorrowRequests';
 import { useUnreadNotifications } from '../../hooks/useUnreadNotifications';
 import { PERMISSION_MODULES, PERMISSION_ACTIONS } from '../../models/rbacModel';
 
-export const SIDEBAR_WIDTH = 265;
-
-const MotionListItemButton = motion.create(ListItemButton);
+export const SIDEBAR_WIDTH = 240;
 
 const MODULE_MAP = {
   dashboard: PERMISSION_MODULES.DASHBOARD,
@@ -38,6 +35,22 @@ const MODULE_MAP = {
   admins: PERMISSION_MODULES.ADMINS,
   settings: PERMISSION_MODULES.SETTINGS,
 };
+
+// Logical Menu Groupings
+const NAV_GROUPS = [
+  {
+    title: 'OVERVIEW',
+    itemIds: ['dashboard', 'reports'],
+  },
+  {
+    title: 'MANAGEMENT',
+    itemIds: ['books', 'requests', 'returns', 'students', 'scanner'],
+  },
+  {
+    title: 'SYSTEM',
+    itemIds: ['notifications', 'activity', 'admins', 'settings'],
+  },
+];
 
 export const Sidebar = ({ mobileOpen, onMobileClose }) => {
   const location = useLocation();
@@ -83,146 +96,148 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
       {/* Brand Header */}
       <Box
         sx={{
-          p: 3,
+          p: 2.5,
           display: 'flex',
           alignItems: 'center',
-          gap: 1.75,
+          gap: 1.5,
           borderBottom: `1px solid ${BORROW_COLORS.border}`,
         }}
       >
         <Box
           sx={{
-            width: 44,
-            height: 44,
-            borderRadius: '12px',
-            background: BORROW_COLORS.primaryGradient,
+            width: 34,
+            height: 34,
+            borderRadius: '8px',
+            backgroundColor: BORROW_COLORS.primary,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: '#FFFFFF',
-            boxShadow: '0px 4px 12px rgba(37, 99, 235, 0.3)',
           }}
         >
-          <AutoStoriesIcon sx={{ fontSize: 24 }} />
+          <AutoStoriesIcon sx={{ fontSize: 20 }} />
         </Box>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary, lineHeight: 1.1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary, lineHeight: 1.1 }}>
             Borrow
           </Typography>
-          <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 700, letterSpacing: 0.5 }}>
+          <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted, fontWeight: 600, fontSize: '0.6875rem' }}>
             ADMIN PORTAL
           </Typography>
         </Box>
       </Box>
 
-      {/* Navigation Links */}
-      <Box sx={{ flexGrow: 1, py: 2, px: 2, overflowY: 'auto' }}>
-        <Typography
-          variant="caption"
-          sx={{
-            px: 2,
-            mb: 1,
-            display: 'block',
-            fontWeight: 700,
-            color: BORROW_COLORS.textSecondary,
-            letterSpacing: 1,
-          }}
-        >
-          MAIN MENU
-        </Typography>
-
-        <List disablePadding>
-          {visibleNavItems.map((item) => {
-            const IconComponent = item.icon;
-            const isActive = location.pathname === item.path || (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
-            const badgeVal = getBadgeValue(item.id);
-
-            return (
-              <ListItem key={item.id} disablePadding sx={{ mb: 0.75 }}>
-                <MotionListItemButton
-                  whileHover={{ x: 4 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleNavClick(item.path)}
-                  sx={{
-                    borderRadius: '12px',
-                    py: 1.25,
-                    px: 2,
-                    position: 'relative',
-                    backgroundColor: isActive ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
-                    color: isActive ? BORROW_COLORS.primary : BORROW_COLORS.textSecondary,
-                    '&:hover': {
-                      backgroundColor: isActive ? 'rgba(37, 99, 235, 0.12)' : 'rgba(15, 23, 42, 0.04)',
-                      color: isActive ? BORROW_COLORS.primary : BORROW_COLORS.textPrimary,
-                    },
-                  }}
-                >
-                  {/* Active Indicator Bar */}
-                  {isActive && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        left: 0,
-                        top: '15%',
-                        height: '70%',
-                        width: 4,
-                        borderRadius: '0 4px 4px 0',
-                        background: BORROW_COLORS.primaryGradient,
-                      }}
-                    />
-                  )}
-
-                  <ListItemIcon
-                    sx={{
-                      minWidth: 40,
-                      color: isActive ? BORROW_COLORS.primary : BORROW_COLORS.textSecondary,
-                    }}
-                  >
-                    {badgeVal > 0 ? (
-                      <Badge badgeContent={badgeVal} color="primary">
-                        <IconComponent />
-                      </Badge>
-                    ) : (
-                      <IconComponent />
-                    )}
-                  </ListItemIcon>
-
-                  <ListItemText
-                    primary={item.title}
-                    primaryTypographyProps={{
-                      fontSize: '0.925rem',
-                      fontWeight: isActive ? 700 : 500,
-                    }}
-                  />
-                </MotionListItemButton>
-              </ListItem>
-            );
-          })}
-        </List>
-      </Box>
-
-      {/* User Info & Logout Footer */}
+      {/* Navigation Links - Grouped & Clean */}
       <Box
         sx={{
-          p: 2,
-          m: 2,
-          borderRadius: '16px',
-          backgroundColor: '#F8FAFC',
-          border: `1px solid ${BORROW_COLORS.border}`,
+          flexGrow: 1,
+          py: 2,
+          px: 1.5,
+          overflowY: 'auto',
+          scrollBehavior: 'smooth',
+          '&::-webkit-scrollbar': { width: 4 },
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+        {NAV_GROUPS.map((group) => {
+          const groupItems = visibleNavItems.filter((item) => group.itemIds.includes(item.id));
+          if (groupItems.length === 0) return null;
+
+          return (
+            <Box key={group.title} sx={{ mb: 2.5 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  px: 1.5,
+                  mb: 0.75,
+                  display: 'block',
+                  fontWeight: 700,
+                  fontSize: '0.6875rem',
+                  color: BORROW_COLORS.textMuted,
+                  letterSpacing: '0.05em',
+                }}
+              >
+                {group.title}
+              </Typography>
+
+              <List disablePadding>
+                {groupItems.map((item) => {
+                  const IconComponent = item.icon;
+                  const isActive =
+                    location.pathname === item.path ||
+                    (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+                  const badgeVal = getBadgeValue(item.id);
+
+                  return (
+                    <ListItem key={item.id} disablePadding sx={{ mb: 0.5 }}>
+                      <ListItemButton
+                        onClick={() => handleNavClick(item.path)}
+                        sx={{
+                          borderRadius: '6px',
+                          py: 0.85,
+                          px: 1.5,
+                          backgroundColor: isActive ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
+                          color: isActive ? BORROW_COLORS.primary : BORROW_COLORS.textSecondary,
+                          fontWeight: isActive ? 600 : 500,
+                          transition: 'all 0.15s ease-in-out',
+                          '&:hover': {
+                            backgroundColor: isActive ? 'rgba(37, 99, 235, 0.12)' : BORROW_COLORS.background,
+                            color: isActive ? BORROW_COLORS.primary : BORROW_COLORS.textPrimary,
+                          },
+                        }}
+                      >
+                        <ListItemIcon
+                          sx={{
+                            minWidth: 32,
+                            color: isActive ? BORROW_COLORS.primary : BORROW_COLORS.textMuted,
+                          }}
+                        >
+                          {badgeVal > 0 ? (
+                            <Badge badgeContent={badgeVal} color="primary" sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', height: 16, minWidth: 16 } }}>
+                              <IconComponent sx={{ fontSize: 19 }} />
+                            </Badge>
+                          ) : (
+                            <IconComponent sx={{ fontSize: 19 }} />
+                          )}
+                        </ListItemIcon>
+
+                        <ListItemText
+                          primary={item.title}
+                          primaryTypographyProps={{
+                            fontSize: '0.84375rem',
+                            fontWeight: isActive ? 600 : 500,
+                          }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Box>
+          );
+        })}
+      </Box>
+
+      {/* User Profile & Logout Footer */}
+      <Box
+        sx={{
+          p: 1.5,
+          borderTop: `1px solid ${BORROW_COLORS.border}`,
+          backgroundColor: BORROW_COLORS.surface,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1 }}>
           <Avatar
             src={adminProfile?.avatarUrl || user?.photoURL || ''}
             alt={adminProfile?.fullName || user?.displayName || 'Admin'}
-            sx={{ width: 40, height: 40, bgcolor: BORROW_COLORS.primary, fontWeight: 700 }}
+            sx={{ width: 32, height: 32, bgcolor: BORROW_COLORS.primary, fontSize: '0.8125rem', fontWeight: 600 }}
           >
             {(adminProfile?.fullName || user?.displayName || user?.email || 'A')[0].toUpperCase()}
           </Avatar>
           <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, fontSize: '0.8125rem', color: BORROW_COLORS.textPrimary, lineHeight: 1.2 }}>
               {adminProfile?.fullName || user?.displayName || 'Librarian'}
             </Typography>
-            <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.primary, fontWeight: 600 }}>
+            <Typography variant="caption" noWrap sx={{ color: BORROW_COLORS.textMuted, fontSize: '0.71875rem' }}>
               {adminProfile?.role || role || 'Librarian'}
             </Typography>
           </Box>
@@ -231,22 +246,21 @@ export const Sidebar = ({ mobileOpen, onMobileClose }) => {
         <ListItemButton
           onClick={handleLogoutClick}
           sx={{
-            borderRadius: '10px',
-            py: 1,
-            px: 1.5,
+            borderRadius: '6px',
+            py: 0.5,
+            px: 1,
             color: BORROW_COLORS.error,
-            backgroundColor: 'rgba(239, 68, 68, 0.05)',
             '&:hover': {
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              backgroundColor: BORROW_COLORS.errorLight,
             },
           }}
         >
-          <ListItemIcon sx={{ minWidth: 32, color: BORROW_COLORS.error }}>
-            <LogoutOutlinedIcon fontSize="small" />
+          <ListItemIcon sx={{ minWidth: 26, color: BORROW_COLORS.error }}>
+            <LogoutOutlinedIcon sx={{ fontSize: 16 }} />
           </ListItemIcon>
           <ListItemText
-            primary="Logout Session"
-            primaryTypographyProps={{ fontSize: '0.85rem', fontWeight: 600 }}
+            primary="Sign out"
+            primaryTypographyProps={{ fontSize: '0.78125rem', fontWeight: 500 }}
           />
         </ListItemButton>
       </Box>

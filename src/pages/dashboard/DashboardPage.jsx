@@ -5,29 +5,29 @@ import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
-import Avatar from '@mui/material/Avatar';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
-import Alert from '@mui/material/Alert';
-import AlertTitle from '@mui/material/AlertTitle';
+import Button from '@mui/material/Button';
+import Avatar from '@mui/material/Avatar';
+import Badge from '@mui/material/Badge';
+import Divider from '@mui/material/Divider';
+import toast from 'react-hot-toast';
+
+// Icons
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import SwapHorizontalCircleOutlinedIcon from '@mui/icons-material/SwapHorizontalCircleOutlined';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
-import AssignmentReturnOutlinedIcon from '@mui/icons-material/AssignmentReturnOutlined';
-import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import BookmarkAddOutlinedIcon from '@mui/icons-material/BookmarkAddOutlined';
-import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import AssignmentReturnedOutlinedIcon from '@mui/icons-material/AssignmentReturnedOutlined';
+import QrCodeScannerOutlinedIcon from '@mui/icons-material/QrCodeScannerOutlined';
+import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import toast from 'react-hot-toast';
-import { motion } from 'framer-motion';
+import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import PageContainer from '../../components/common/PageContainer';
@@ -42,23 +42,28 @@ import useBooks from '../../hooks/useBooks';
 import useBorrowRequests from '../../hooks/useBorrowRequests';
 import useTransactions from '../../hooks/useTransactions';
 import useStudents from '../../hooks/useStudents';
-import useActivity from '../../hooks/useActivity';
+import useNotifications from '../../hooks/useNotifications';
 import { computeExecutiveHealthMetrics } from '../../services/firebase/reportService';
+
+import BorrowTrendChart from '../../components/dashboard/BorrowTrendChart';
+import SystemHealthWidget from '../../components/dashboard/SystemHealthWidget';
+import TodayActivityPanel from '../../components/dashboard/TodayActivityPanel';
 
 export const DashboardPage = () => {
   const navigate = useNavigate();
 
-  const { books, stats: bookStats, addBook } = useBooks();
+  const { books, addBook } = useBooks();
   const { requests, approveRequest, rejectRequest } = useBorrowRequests();
   const { transactions, issueBook, returnBook } = useTransactions();
   const { students } = useStudents();
-  const { activities } = useActivity();
+  const { notifications } = useNotifications();
 
+  // Quick Action Dialog States
   const [addBookOpen, setAddBookOpen] = useState(false);
   const [issueBookOpen, setIssueBookOpen] = useState(false);
   const [returnBookOpen, setReturnBookOpen] = useState(false);
 
-  // Form States
+  // Form Inputs
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookIsbn, setNewBookIsbn] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
@@ -67,24 +72,46 @@ export const DashboardPage = () => {
   const [issueBookId, setIssueBookId] = useState('');
   const [returnTransactionId, setReturnTransactionId] = useState('');
 
-  // Executive Health Metrics & System Alerts Calculation
+  // Executive KPI & Operational Summary Calculation
   const healthMetrics = useMemo(() => {
     return computeExecutiveHealthMetrics(books, transactions, requests, students);
   }, [books, transactions, requests, students]);
 
+  // Today's Date & Greeting
+  const todayFormatted = useMemo(() => {
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  }, []);
+
+  const pendingRequestsList = useMemo(() => {
+    return requests.filter((r) => r.status === 'Pending').slice(0, 5);
+  }, [requests]);
+
+  const recentTransactionsList = useMemo(() => {
+    return (transactions || []).slice(0, 5);
+  }, [transactions]);
+
   const handleApproveRequest = async (id) => {
     try {
       await approveRequest(id, 14);
+      toast.success('Request approved!');
     } catch (err) {
       console.error(err);
+      toast.error('Failed to approve request');
     }
   };
 
   const handleRejectRequest = async (id) => {
     try {
       await rejectRequest(id, 'Rejected by Librarian');
+      toast.success('Request rejected');
     } catch (err) {
       console.error(err);
+      toast.error('Failed to reject request');
     }
   };
 
@@ -105,14 +132,16 @@ export const DashboardPage = () => {
       setNewBookIsbn('');
       setNewBookAuthor('');
       setAddBookOpen(false);
+      toast.success('Book added to catalog');
     } catch (err) {
       console.error(err);
+      toast.error('Failed to add book');
     }
   };
 
   const handleIssueBookSubmit = async () => {
     if (!issueStudentId || !issueBookId) {
-      toast.error('Please enter student register number and book ID');
+      toast.error('Please enter student ID and book ID');
       return;
     }
     try {
@@ -134,6 +163,7 @@ export const DashboardPage = () => {
       setIssueStudentId('');
       setIssueBookId('');
       setIssueBookOpen(false);
+      toast.success('Book checkout completed');
     } catch (err) {
       toast.error(err.message || 'Failed to issue book');
     }
@@ -148,32 +178,32 @@ export const DashboardPage = () => {
       await returnBook(returnTransactionId.trim(), 'Good', 'Returned via quick action');
       setReturnTransactionId('');
       setReturnBookOpen(false);
+      toast.success('Book return recorded');
     } catch (err) {
       toast.error(err.message || 'Failed to return book');
     }
   };
 
-  // Table Columns Setup
-  const requestColumns = [
+  // Columns for Pending Requests Table
+  const pendingColumns = [
     {
       id: 'bookTitle',
       label: 'Book Information',
-      minWidth: 240,
+      minWidth: 200,
       format: (val, row) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
           <Box
             sx={{
-              width: 36,
-              height: 48,
-              borderRadius: '6px',
+              width: 32,
+              height: 42,
+              borderRadius: '4px',
               backgroundColor: BORROW_COLORS.primary,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: '#FFF',
-              fontWeight: 800,
-              fontSize: '0.75rem',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              fontWeight: 700,
+              fontSize: '0.65rem',
               overflow: 'hidden',
             }}
           >
@@ -183,8 +213,8 @@ export const DashboardPage = () => {
               'BOOK'
             )}
           </Box>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary }}>
               {val || row.title}
             </Typography>
             <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
@@ -197,10 +227,10 @@ export const DashboardPage = () => {
     {
       id: 'studentName',
       label: 'Student',
-      minWidth: 160,
+      minWidth: 150,
       format: (val, row) => (
-        <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600 }}>
             {val}
           </Typography>
           <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
@@ -211,95 +241,137 @@ export const DashboardPage = () => {
     },
     {
       id: 'requestDate',
-      label: 'Date & Time',
-      minWidth: 140,
-      format: (val) => (val ? new Date(val).toLocaleDateString() : 'N/A'),
+      label: 'Requested Time',
+      minWidth: 120,
+      format: (val) => (val ? new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'),
+    },
+    {
+      id: 'actions',
+      label: 'Action',
+      minWidth: 100,
+      align: 'right',
+      format: (_, row) => (
+        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+          <Tooltip title="Approve">
+            <IconButton
+              size="small"
+              onClick={() => handleApproveRequest(row.id)}
+              sx={{
+                backgroundColor: BORROW_COLORS.successLight,
+                color: BORROW_COLORS.success,
+                '&:hover': { backgroundColor: '#BBF7D0' },
+                p: 0.5,
+              }}
+            >
+              <CheckIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Reject">
+            <IconButton
+              size="small"
+              onClick={() => handleRejectRequest(row.id)}
+              sx={{
+                backgroundColor: BORROW_COLORS.errorLight,
+                color: BORROW_COLORS.error,
+                '&:hover': { backgroundColor: '#FCA5A5' },
+                p: 0.5,
+              }}
+            >
+              <CloseIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ];
+
+  // Columns for Recent Transactions Table
+  const transactionColumns = [
+    {
+      id: 'studentName',
+      label: 'Student',
+      minWidth: 160,
+      format: (val, row) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600 }}>
+            {val || 'Student User'}
+          </Typography>
+          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
+            {row.registerNumber || row.studentId}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      id: 'bookTitle',
+      label: 'Book',
+      minWidth: 200,
+      format: (val) => (
+        <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+          {val || 'Library Book'}
+        </Typography>
+      ),
+    },
+    {
+      id: 'type',
+      label: 'Action',
+      minWidth: 110,
+      format: (val) => (
+        <Typography variant="caption" sx={{ fontWeight: 600, color: val === 'return' ? BORROW_COLORS.success : BORROW_COLORS.primary }}>
+          {val === 'return' ? 'Book Return' : 'Checkout'}
+        </Typography>
+      ),
+    },
+    {
+      id: 'issueDate',
+      label: 'Time',
+      minWidth: 120,
+      format: (val, row) => {
+        const d = val || row.returnDate || row.createdAt;
+        return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recent';
+      },
     },
     {
       id: 'status',
       label: 'Status',
-      minWidth: 120,
-      format: (val) => <StatusChip status={val} />,
-    },
-    {
-      id: 'actions',
-      label: 'Actions',
-      minWidth: 120,
-      align: 'right',
-      format: (_, row) =>
-        row.status === 'Pending' ? (
-          <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-            <Tooltip title="Approve Request">
-              <IconButton
-                size="small"
-                onClick={() => handleApproveRequest(row.id)}
-                sx={{
-                  backgroundColor: BORROW_COLORS.successLight,
-                  color: BORROW_COLORS.success,
-                  '&:hover': { backgroundColor: '#BBF7D0' },
-                }}
-              >
-                <CheckIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Reject Request">
-              <IconButton
-                size="small"
-                onClick={() => handleRejectRequest(row.id)}
-                sx={{
-                  backgroundColor: BORROW_COLORS.errorLight,
-                  color: BORROW_COLORS.error,
-                  '&:hover': { backgroundColor: '#FCA5A5' },
-                }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        ) : (
-          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 600 }}>
-            Processed
-          </Typography>
-        ),
+      minWidth: 100,
+      format: (val) => <StatusChip status={val || 'Completed'} />,
     },
   ];
 
   return (
     <PageContainer
-      title="Executive Dashboard"
-      subtitle="Real-time operational metrics, circulation health alerts, and instant quick actions."
+      title="Dashboard"
+      subtitle={`${todayFormatted} — Operational overview & circulation status.`}
+      actions={
+        <CustomButton
+          variant="primary"
+          startIcon={<BookmarkAddOutlinedIcon />}
+          onClick={() => setAddBookOpen(true)}
+        >
+          + Add Book
+        </CustomButton>
+      }
     >
-      {/* 1. Real-Time System Alerts Banner if warnings exist */}
-      {healthMetrics.alerts && healthMetrics.alerts.length > 0 && (
-        <Box sx={{ mb: 3 }}>
-          {healthMetrics.alerts.map((alert) => (
-            <Alert key={alert.id} severity={alert.type} sx={{ mb: 1, borderRadius: '12px', fontWeight: 600 }}>
-              <AlertTitle sx={{ fontWeight: 800 }}>Real-Time System Notification</AlertTitle>
-              {alert.message}
-            </Alert>
-          ))}
-        </Box>
-      )}
-
-      {/* 2. Executive Metric Statistics Grid (12 Cards) */}
-      <Grid container spacing={2.5} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3} lg={2}>
+      {/* 1. PRIMARY KPI SECTION (Strictly 4 Cards) */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={6} md={3}>
           <DashboardCard
             title="Total Books"
             value={healthMetrics.totalTitles.toLocaleString()}
             subtitle="catalog titles"
             icon={MenuBookIcon}
-            iconBgColor="rgba(37, 99, 235, 0.1)"
+            iconBgColor={BORROW_COLORS.primarySurface}
             iconColor={BORROW_COLORS.primary}
             onClick={() => navigate(ROUTES.BOOKS)}
           />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3} lg={2}>
+        <Grid item xs={12} sm={6} md={3}>
           <DashboardCard
-            title="Available"
+            title="Available Books"
             value={healthMetrics.availableCopies.toLocaleString()}
-            subtitle="copies on shelf"
+            subtitle="on shelf ready"
             icon={CheckCircleOutlineIcon}
             iconBgColor={BORROW_COLORS.successLight}
             iconColor={BORROW_COLORS.success}
@@ -307,9 +379,9 @@ export const DashboardPage = () => {
           />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3} lg={2}>
+        <Grid item xs={12} sm={6} md={3}>
           <DashboardCard
-            title="Borrowed"
+            title="Borrowed Books"
             value={healthMetrics.borrowedCopies.toLocaleString()}
             subtitle="active loans"
             icon={SwapHorizontalCircleOutlinedIcon}
@@ -319,21 +391,9 @@ export const DashboardPage = () => {
           />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3} lg={2}>
+        <Grid item xs={12} sm={6} md={3}>
           <DashboardCard
-            title="Overdue"
-            value={healthMetrics.overdueCount.toLocaleString()}
-            subtitle="past due date"
-            icon={WarningAmberIcon}
-            iconBgColor={BORROW_COLORS.errorLight}
-            iconColor={BORROW_COLORS.error}
-            onClick={() => navigate(ROUTES.RETURNS)}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="Pending Req."
+            title="Pending Requests"
             value={healthMetrics.pendingRequests.toLocaleString()}
             subtitle="action required"
             icon={PendingActionsIcon}
@@ -342,237 +402,175 @@ export const DashboardPage = () => {
             onClick={() => navigate(ROUTES.REQUESTS)}
           />
         </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="Returned Today"
-            value={healthMetrics.todayReturns.toLocaleString()}
-            subtitle="checked in"
-            icon={AssignmentReturnOutlinedIcon}
-            iconBgColor={BORROW_COLORS.infoLight}
-            iconColor={BORROW_COLORS.info}
-            onClick={() => navigate(ROUTES.RETURNS)}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="Today's Issues"
-            value={healthMetrics.todayIssues.toLocaleString()}
-            subtitle="checked out"
-            icon={MenuBookOutlinedIcon}
-            iconBgColor="rgba(37, 99, 235, 0.1)"
-            iconColor={BORROW_COLORS.primary}
-            onClick={() => navigate(ROUTES.RETURNS)}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="Damaged"
-            value={healthMetrics.damagedCopies.toLocaleString()}
-            subtitle="needs repair"
-            icon={ReportProblemIcon}
-            iconBgColor={BORROW_COLORS.warningLight}
-            iconColor={BORROW_COLORS.warning}
-            onClick={() => navigate(ROUTES.BOOKS)}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="Lost Copies"
-            value={healthMetrics.lostCopies.toLocaleString()}
-            subtitle="unreturned"
-            icon={ReportProblemIcon}
-            iconBgColor={BORROW_COLORS.errorLight}
-            iconColor={BORROW_COLORS.error}
-            onClick={() => navigate(ROUTES.BOOKS)}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="Expired Res."
-            value={healthMetrics.expiredReservations.toLocaleString()}
-            subtitle="uncollected"
-            icon={PendingActionsIcon}
-            iconBgColor="rgba(100, 116, 139, 0.1)"
-            iconColor="#64748B"
-            onClick={() => navigate(ROUTES.REQUESTS)}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="Active Students"
-            value={healthMetrics.totalStudents.toLocaleString()}
-            subtitle="registered"
-            icon={PeopleOutlineIcon}
-            iconBgColor="rgba(139, 92, 246, 0.1)"
-            iconColor="#8B5CF6"
-            onClick={() => navigate(ROUTES.STUDENTS)}
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3} lg={2}>
-          <DashboardCard
-            title="System Health"
-            value={healthMetrics.systemStatus}
-            subtitle="operational status"
-            icon={CheckCircleOutlineIcon}
-            iconBgColor={healthMetrics.systemStatus === 'Healthy' ? BORROW_COLORS.successLight : BORROW_COLORS.warningLight}
-            iconColor={healthMetrics.systemStatus === 'Healthy' ? BORROW_COLORS.success : BORROW_COLORS.warning}
-            onClick={() => navigate(ROUTES.REPORTS)}
-          />
-        </Grid>
       </Grid>
 
-      {/* 3. Quick Actions Banner */}
+      {/* 2. QUICK ACTIONS TOOLBAR */}
       <Card
         sx={{
-          mb: 4,
-          background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
-          color: '#FFFFFF',
-          p: 1,
+          mb: 3.5,
+          backgroundColor: BORROW_COLORS.surface,
+          border: `1px solid ${BORROW_COLORS.border}`,
+          borderRadius: '12px',
+          boxShadow: BORROW_COLORS.cardShadow,
         }}
       >
-        <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', md: 'row' },
-              alignItems: { xs: 'flex-start', md: 'center' },
-              justifyContent: 'space-between',
-              gap: 2,
-            }}
-          >
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 800, color: '#FFFFFF', mb: 0.5 }}>
-                Quick Librarian Actions
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#94A3B8' }}>
-                Perform instant inventory additions, issue books, or process return receipts.
-              </Typography>
-            </Box>
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary }}>
+              Quick Actions
+            </Typography>
+            <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
+              Frequent Librarian Tasks
+            </Typography>
+          </Box>
 
-            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-              <CustomButton
-                variant="contained"
-                startIcon={<BookmarkAddOutlinedIcon />}
-                onClick={() => setAddBookOpen(true)}
-                sx={{ background: BORROW_COLORS.primaryGradient }}
-              >
-                Add New Book
-              </CustomButton>
+          <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap' }}>
+            <CustomButton
+              variant="primary"
+              size="small"
+              startIcon={<BookmarkAddOutlinedIcon />}
+              onClick={() => setAddBookOpen(true)}
+            >
+              Add Book
+            </CustomButton>
 
-              <CustomButton
-                variant="outlined"
-                startIcon={<MenuBookOutlinedIcon />}
-                onClick={() => setIssueBookOpen(true)}
-                sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', '&:hover': { borderColor: '#FFFFFF' } }}
-              >
-                Issue Book
-              </CustomButton>
+            <CustomButton
+              variant="secondary"
+              size="small"
+              startIcon={<MenuBookIcon />}
+              onClick={() => setIssueBookOpen(true)}
+            >
+              Issue Book
+            </CustomButton>
 
-              <CustomButton
-                variant="outlined"
-                startIcon={<AssignmentReturnedOutlinedIcon />}
-                onClick={() => setReturnBookOpen(true)}
-                sx={{ borderColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', '&:hover': { borderColor: '#FFFFFF' } }}
-              >
-                Return Book
-              </CustomButton>
-            </Box>
+            <CustomButton
+              variant="secondary"
+              size="small"
+              startIcon={<AssignmentReturnedOutlinedIcon />}
+              onClick={() => setReturnBookOpen(true)}
+            >
+              Return Book
+            </CustomButton>
+
+            <CustomButton
+              variant="outline"
+              size="small"
+              startIcon={<QrCodeScannerOutlinedIcon />}
+              onClick={() => navigate(ROUTES.SCANNER)}
+            >
+              Scan QR
+            </CustomButton>
+
+            <CustomButton
+              variant="outline"
+              size="small"
+              startIcon={<PersonAddOutlinedIcon />}
+              onClick={() => navigate(ROUTES.STUDENTS)}
+            >
+              Add Student
+            </CustomButton>
+
+            <CustomButton
+              variant="ghost"
+              size="small"
+              startIcon={<PendingActionsIcon />}
+              onClick={() => navigate(ROUTES.REQUESTS)}
+            >
+              Approve Requests ({healthMetrics.pendingRequests})
+            </CustomButton>
           </Box>
         </CardContent>
       </Card>
 
-      {/* 4. Main Data Sections Grid */}
-      <Grid container spacing={3}>
-        {/* Left Column: Recent Borrow Requests Table */}
-        <Grid item xs={12} lg={8}>
+      {/* 3. OPERATIONAL GRID: PENDING REQUESTS & TODAY'S ACTIVITY */}
+      <Grid container spacing={3} sx={{ mb: 3.5 }}>
+        {/* Left Column: Pending Requests Panel */}
+        <Grid item xs={12} lg={7}>
           <SectionHeader
-            title="Recent Borrow Requests"
-            subtitle="Student requests waiting for librarian approval"
+            title="Pending Requests"
+            subtitle="Student checkout requests requiring librarian decision"
             action={
               <CustomButton
-                variant="text"
+                variant="ghost"
+                size="small"
                 endIcon={<ArrowForwardIcon />}
                 onClick={() => navigate(ROUTES.REQUESTS)}
-                sx={{ color: BORROW_COLORS.primary }}
               >
-                View All Requests
+                View All
               </CustomButton>
             }
           />
 
           <CustomTable
-            columns={requestColumns}
-            data={requests}
+            columns={pendingColumns}
+            data={pendingRequestsList}
             rowsPerPage={5}
             emptyType="requests"
-            emptyTitle="No Pending Requests"
+            emptyTitle="No Pending Approvals"
             emptyDescription="All student borrow requests have been processed!"
           />
         </Grid>
 
-        {/* Right Column: Live Activity Feed */}
-        <Grid item xs={12} lg={4}>
-          <SectionHeader title="Live Activity Feed" subtitle="Real-time operations timeline" />
+        {/* Right Column: Today's Activity & Recent Notifications */}
+        <Grid item xs={12} lg={5}>
+          {/* Today's Operational Summary */}
+          <TodayActivityPanel
+            todayIssues={healthMetrics.todayIssues}
+            todayReturns={healthMetrics.todayReturns}
+            todayStudents={students.length}
+            pendingRequests={healthMetrics.pendingRequests}
+            sx={{ mb: 2.5 }}
+          />
 
-          <Card sx={{ height: 'calc(100% - 48px)' }}>
-            <CardContent sx={{ p: 2.5 }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                {activities.length > 0 ? (
-                  activities.slice(0, 6).map((act) => (
-                    <motion.div
-                      key={act.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.2 }}
+          {/* Recent Notifications Panel */}
+          <Card
+            sx={{
+              borderRadius: '12px',
+              border: `1px solid ${BORROW_COLORS.border}`,
+              backgroundColor: BORROW_COLORS.surface,
+              boxShadow: BORROW_COLORS.cardShadow,
+            }}
+          >
+            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <NotificationsOutlinedIcon sx={{ fontSize: 18, color: BORROW_COLORS.primary }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary }}>
+                    Recent Notifications
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  onClick={() => navigate(ROUTES.NOTIFICATIONS)}
+                  sx={{ fontSize: '0.75rem', textTransform: 'none', color: BORROW_COLORS.primary }}
+                >
+                  View All
+                </Button>
+              </Box>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                {notifications.length > 0 ? (
+                  notifications.slice(0, 3).map((notif) => (
+                    <Box
+                      key={notif.id}
+                      sx={{
+                        p: 1.25,
+                        borderRadius: '8px',
+                        backgroundColor: BORROW_COLORS.background,
+                        border: `1px solid ${BORROW_COLORS.border}`,
+                      }}
                     >
-                      <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                        <Avatar
-                          sx={{
-                            width: 36,
-                            height: 36,
-                            fontSize: '0.85rem',
-                            fontWeight: 700,
-                            backgroundColor:
-                              act.type === 'request'
-                                ? 'rgba(37, 99, 235, 0.1)'
-                                : act.type === 'return'
-                                ? BORROW_COLORS.successLight
-                                : BORROW_COLORS.infoLight,
-                            color:
-                              act.type === 'request'
-                                ? BORROW_COLORS.primary
-                                : act.type === 'return'
-                                ? BORROW_COLORS.success
-                                : BORROW_COLORS.info,
-                          }}
-                        >
-                          {(act.user || act.performedBy || 'A')[0]}
-                        </Avatar>
-
-                        <Box sx={{ flexGrow: 1 }}>
-                          <Typography variant="body2" sx={{ color: BORROW_COLORS.textPrimary, lineHeight: 1.4 }}>
-                            <strong>{act.user || act.performedBy || 'System Admin'}</strong> {act.action || act.activityType}{' '}
-                            <span style={{ color: BORROW_COLORS.primary, fontWeight: 600 }}>
-                              "{act.target || act.affectedDocumentName || ''}"
-                            </span>
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, mt: 0.25, display: 'block' }}>
-                            {act.time || 'Just now'}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </motion.div>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: '0.8125rem' }}>
+                        {notif.title || 'System Notification'}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, fontSize: '0.75rem', mt: 0.25 }} noWrap>
+                        {notif.message || notif.content || 'Notice posted to admin log.'}
+                      </Typography>
+                    </Box>
                   ))
                 ) : (
-                  <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, textAlign: 'center', py: 4 }}>
-                    No recent activities recorded.
+                  <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, py: 1 }}>
+                    No unread notifications.
                   </Typography>
                 )}
               </Box>
@@ -580,6 +578,43 @@ export const DashboardPage = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* 4. CIRCULATION TREND CHART */}
+      <Box sx={{ mb: 3.5 }}>
+        <BorrowTrendChart transactions={transactions} />
+      </Box>
+
+      {/* 5. RECENT TRANSACTIONS */}
+      <Box sx={{ mb: 3.5 }}>
+        <SectionHeader
+          title="Recent Transactions"
+          subtitle="Latest circulation activity log"
+          action={
+            <CustomButton
+              variant="ghost"
+              size="small"
+              endIcon={<ArrowForwardIcon />}
+              onClick={() => navigate(ROUTES.RETURNS)}
+            >
+              View All
+            </CustomButton>
+          }
+        />
+
+        <CustomTable
+          columns={transactionColumns}
+          data={recentTransactionsList}
+          rowsPerPage={5}
+          emptyType="activity"
+          emptyTitle="No Recent Activity"
+          emptyDescription="No borrowing or return transactions recorded today."
+        />
+      </Box>
+
+      {/* 6. SYSTEM HEALTH WIDGET */}
+      <Box>
+        <SystemHealthWidget status={healthMetrics.systemStatus} />
+      </Box>
 
       {/* --- QUICK ACTION MODALS --- */}
 
@@ -591,10 +626,10 @@ export const DashboardPage = () => {
         subtitle="Insert a new book entry into the library catalog."
         actions={
           <>
-            <CustomButton variant="outlined" onClick={() => setAddBookOpen(false)}>
+            <CustomButton variant="outline" onClick={() => setAddBookOpen(false)}>
               Cancel
             </CustomButton>
-            <CustomButton variant="contained" onClick={handleCreateBookSubmit}>
+            <CustomButton variant="primary" onClick={handleCreateBookSubmit}>
               Save Book
             </CustomButton>
           </>
@@ -650,10 +685,10 @@ export const DashboardPage = () => {
         subtitle="Assign a physical copy to a registered student."
         actions={
           <>
-            <CustomButton variant="outlined" onClick={() => setIssueBookOpen(false)}>
+            <CustomButton variant="outline" onClick={() => setIssueBookOpen(false)}>
               Cancel
             </CustomButton>
-            <CustomButton variant="contained" onClick={handleIssueBookSubmit}>
+            <CustomButton variant="primary" onClick={handleIssueBookSubmit}>
               Confirm Checkout
             </CustomButton>
           </>
@@ -687,10 +722,10 @@ export const DashboardPage = () => {
         subtitle="Process returned book and check condition."
         actions={
           <>
-            <CustomButton variant="outlined" onClick={() => setReturnBookOpen(false)}>
+            <CustomButton variant="outline" onClick={() => setReturnBookOpen(false)}>
               Cancel
             </CustomButton>
-            <CustomButton variant="contained" onClick={handleReturnBookSubmit}>
+            <CustomButton variant="primary" onClick={handleReturnBookSubmit}>
               Process Return
             </CustomButton>
           </>

@@ -1,35 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Box from '@mui/material/Box';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import Badge from '@mui/material/Badge';
-import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList';
+import Typography from '@mui/material/Typography';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Tooltip from '@mui/material/Tooltip';
+import toast from 'react-hot-toast';
+
+// Icons
+import TableRowsIcon from '@mui/icons-material/TableRows';
+import GridViewIcon from '@mui/icons-material/GridView';
 import AddIcon from '@mui/icons-material/Add';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
 
 import PageContainer from '../../components/common/PageContainer';
 import CustomButton from '../../components/common/CustomButton';
-import BookStatistics from '../../components/books/BookStatistics';
+import UniversalSearchBar from '../../components/common/UniversalSearchBar';
+import UniversalFilterBar from '../../components/common/UniversalFilterBar';
+import SkeletonLoader from '../../components/common/SkeletonLoader';
+import ProtectedPermission from '../../components/rbac/ProtectedPermission';
+
 import BookTable from '../../components/books/BookTable';
+import BookGridView from '../../components/books/BookGridView';
+import BulkActionBar from '../../components/books/BulkActionBar';
 import BookForm from '../../components/books/BookForm';
 import BookDetailsDrawer from '../../components/books/BookDetailsDrawer';
-import BookFilters from '../../components/books/BookFilters';
-import ProtectedPermission from '../../components/rbac/ProtectedPermission';
+
 import { useBooks } from '../../hooks/useBooks';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { PERMISSION_MODULES, PERMISSION_ACTIONS } from '../../models/rbacModel';
+import { exportToCSV } from '../../services/exportService';
 
 export const BooksPage = () => {
   const {
+    books,
+    filteredBooks,
+    loading,
     searchQuery,
     setSearchQuery,
     filterOptions,
+    setFilterOptions,
     resetFilters,
     addBook,
     updateBook,
     archiveBook,
     restoreBook,
+    deleteBook,
+    duplicateBook,
     selectedBook,
     selectedBookCopies,
     drawerOpen,
@@ -38,13 +53,41 @@ export const BooksPage = () => {
     setFormModalOpen,
     editingBook,
     setEditingBook,
+    selectBookForDetails,
   } = useBooks();
 
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  // Local View Toggle State ('table' | 'grid')
+  const [viewMode, setViewMode] = useState('table');
 
-  const activeFilterCount = Object.values(filterOptions).filter(
-    (v) => v !== 'All' && v !== 'Newest' && v !== false
-  ).length;
+  // Multi-Select Bulk Selection State
+  const [selectedBookIds, setSelectedBookIds] = useState([]);
+
+  // Category Options
+  const categoryOptions = [
+    'Computer Science',
+    'Mathematics',
+    'Physics',
+    'Chemistry',
+    'Engineering',
+    'Fiction',
+    'Non-Fiction',
+  ];
+
+  const availabilityOptions = [
+    { label: 'In Stock (Available)', value: 'In Stock' },
+    { label: 'Out of Stock (Issued)', value: 'Out of Stock' },
+  ];
+
+  const sortOptions = [
+    { label: 'Newest Added', value: 'Newest' },
+    { label: 'Oldest', value: 'Oldest' },
+    { label: 'Title (A-Z)', value: 'Alphabetical' },
+    { label: 'Most Borrowed', value: 'Most Borrowed' },
+  ];
+
+  const handleFilterChange = (key, value) => {
+    setFilterOptions((prev) => ({ ...prev, [key]: value }));
+  };
 
   const handleOpenAddForm = () => {
     setEditingBook(null);
@@ -64,22 +107,87 @@ export const BooksPage = () => {
     }
   };
 
+  // Bulk Selection Logic
+  const handleToggleSelectBook = (id) => {
+    setSelectedBookIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = (pageIds) => {
+    const isAllSelected = pageIds.every((id) => selectedBookIds.includes(id));
+    if (isAllSelected) {
+      setSelectedBookIds((prev) => prev.filter((id) => !pageIds.includes(id)));
+    } else {
+      setSelectedBookIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedBookIds([]);
+  };
+
+  // Bulk Operations Actions
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Permanently delete ${selectedBookIds.length} selected books?`)) return;
+    try {
+      for (const id of selectedBookIds) {
+        await deleteBook(id);
+      }
+      setSelectedBookIds([]);
+      toast.success('Selected books permanently deleted.');
+    } catch {
+      toast.error('Failed to delete selected books.');
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    try {
+      for (const id of selectedBookIds) {
+        await archiveBook(id);
+      }
+      setSelectedBookIds([]);
+      toast.success('Selected books archived.');
+    } catch {
+      toast.error('Failed to archive books.');
+    }
+  };
+
+  const handleBulkExport = () => {
+    const selectedData = filteredBooks.filter((b) => selectedBookIds.includes(b.id));
+    const exportRows = (selectedData.length > 0 ? selectedData : filteredBooks).map((b) => ({
+      Title: b.title,
+      Author: b.author,
+      ISBN: b.isbn,
+      Category: b.category,
+      TotalCopies: b.totalCopies || 1,
+      AvailableCopies: b.availableCopies || 0,
+      Status: b.status || 'Available',
+    }));
+    exportToCSV(exportRows, `Books_Inventory_Export_${new Date().toISOString().slice(0, 10)}.csv`);
+    toast.success('Books export file generated!');
+  };
+
+  // Last Updated Timestamp
+  const lastUpdated = useMemo(() => {
+    if (!books || books.length === 0) return 'Just now';
+    const latest = [...books].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))[0];
+    return latest?.updatedAt ? new Date(latest.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Today';
+  }, [books]);
+
   return (
     <PageContainer
-      title="Book Inventory"
-      subtitle="Manage your complete library inventory, ISBN records, physical copy counts, and mobile app synchronization."
+      title="Books Inventory"
+      subtitle={`Total Books: ${books.length} titles in catalog • Last Updated: ${lastUpdated}`}
       actions={
         <ProtectedPermission module={PERMISSION_MODULES.BOOKS} action={PERMISSION_ACTIONS.CREATE}>
-          <CustomButton variant="contained" startIcon={<AddIcon />} onClick={handleOpenAddForm}>
+          <CustomButton variant="primary" startIcon={<AddIcon />} onClick={handleOpenAddForm}>
             + Add Book
           </CustomButton>
         </ProtectedPermission>
       }
     >
-      {/* 1. Inventory Metric Cards */}
-      <BookStatistics />
-
-      {/* 2. Search & Filter Bar */}
+      {/* 1. Universal Search Bar & View Switcher Row */}
       <Box
         sx={{
           display: 'flex',
@@ -87,58 +195,86 @@ export const BooksPage = () => {
           alignItems: { xs: 'stretch', sm: 'center' },
           justifyContent: 'space-between',
           gap: 2,
-          mb: 3,
-          backgroundColor: BORROW_COLORS.surface,
-          p: 2,
-          borderRadius: '16px',
-          border: `1px solid ${BORROW_COLORS.border}`,
-          boxShadow: BORROW_COLORS.cardShadow,
+          mb: 2,
         }}
       >
-        {/* Instant Search Bar */}
-        <TextField
-          placeholder="Search by Title, Author, ISBN, Category, Publisher, or Keywords..."
+        <UniversalSearchBar
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onClear={() => setSearchQuery('')}
+          placeholder="Search by Title, Author, ISBN, Category, Publisher, or Keywords..."
+          width="100%"
           sx={{ flexGrow: 1 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ color: BORROW_COLORS.primary }} />
-              </InputAdornment>
-            ),
-          }}
         />
 
-        {/* Filter Toggle & Reset */}
-        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          <CustomButton
-            variant="outlined"
-            startIcon={
-              <Badge badgeContent={activeFilterCount} color="primary">
-                <FilterListIcon />
-              </Badge>
-            }
-            onClick={() => setFilterDrawerOpen(true)}
-            sx={{ borderColor: BORROW_COLORS.border }}
-          >
-            Filters
-          </CustomButton>
-
-          {(searchQuery || activeFilterCount > 0) && (
-            <CustomButton variant="text" startIcon={<RestartAltIcon />} onClick={resetFilters}>
-              Clear Search
-            </CustomButton>
-          )}
-        </Box>
+        {/* View Switcher (Table / Grid Toggle) */}
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={(_, newView) => newView && setViewMode(newView)}
+          size="small"
+          aria-label="View Mode Switcher"
+          sx={{ backgroundColor: BORROW_COLORS.surface, alignSelf: { xs: 'flex-end', sm: 'center' } }}
+        >
+          <ToggleButton value="table" aria-label="Table View">
+            <Tooltip title="Table View">
+              <TableRowsIcon sx={{ fontSize: 18 }} />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="grid" aria-label="Grid View">
+            <Tooltip title="Grid View">
+              <GridViewIcon sx={{ fontSize: 18 }} />
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
       </Box>
 
-      {/* 3. Main Book Inventory Data Table */}
-      <BookTable onEdit={handleOpenEditForm} />
+      {/* 2. Universal Filter Bar */}
+      <UniversalFilterBar
+        filters={filterOptions}
+        onFilterChange={handleFilterChange}
+        onResetFilters={resetFilters}
+        categoryOptions={categoryOptions}
+        availabilityOptions={availabilityOptions}
+        sortOptions={sortOptions}
+      />
 
-      {/* --- MODALS & DRAWERS --- */}
+      {/* 3. Main Data Content View (Table vs Grid with Skeleton Loaders) */}
+      {loading ? (
+        <SkeletonLoader type={viewMode === 'grid' ? 'grid' : 'table'} rows={8} count={8} />
+      ) : viewMode === 'grid' ? (
+        <BookGridView
+          books={filteredBooks}
+          selectedBookIds={selectedBookIds}
+          onToggleSelectBook={handleToggleSelectBook}
+          onSelectDetails={selectBookForDetails}
+          onEdit={handleOpenEditForm}
+          onDuplicate={duplicateBook}
+          onArchive={archiveBook}
+          onRestore={restoreBook}
+          onDelete={deleteBook}
+        />
+      ) : (
+        <BookTable
+          onEdit={handleOpenEditForm}
+          selectedBookIds={selectedBookIds}
+          onToggleSelectBook={handleToggleSelectBook}
+          onToggleSelectAll={handleToggleSelectAll}
+        />
+      )}
 
-      {/* Add / Edit Book Fullscreen Form Dialog */}
+      {/* 4. Sticky Bulk Actions Bar */}
+      <BulkActionBar
+        selectedCount={selectedBookIds.length}
+        onClearSelection={handleClearSelection}
+        onBulkDelete={handleBulkDelete}
+        onBulkArchive={handleBulkArchive}
+        onBulkExport={handleBulkExport}
+      />
+
+      {/* --- DRAWERS & MODALS --- */}
+
+      {/* Add / Edit Book Dialog */}
       <BookForm
         open={formModalOpen}
         onClose={() => setFormModalOpen(false)}
@@ -147,7 +283,7 @@ export const BooksPage = () => {
         isEditing={Boolean(editingBook)}
       />
 
-      {/* Book Details & Physical Copies Slide-Over Drawer */}
+      {/* Book Details Side Drawer */}
       <BookDetailsDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
@@ -157,9 +293,6 @@ export const BooksPage = () => {
         onArchive={archiveBook}
         onRestore={restoreBook}
       />
-
-      {/* Filter Bottom Sheet / Right Drawer */}
-      <BookFilters open={filterDrawerOpen} onClose={() => setFilterDrawerOpen(false)} />
     </PageContainer>
   );
 };

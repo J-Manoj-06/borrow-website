@@ -11,11 +11,9 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import Divider from '@mui/material/Divider';
 import Avatar from '@mui/material/Avatar';
 import Tooltip from '@mui/material/Tooltip';
-import Chip from '@mui/material/Chip';
 
 // Icons
 import MenuIcon from '@mui/icons-material/Menu';
-import SearchIcon from '@mui/icons-material/Search';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
@@ -29,6 +27,7 @@ import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import HealthDashboardModal from '../common/HealthDashboardModal';
+import UniversalSearchBar from '../common/UniversalSearchBar';
 
 export const TopBar = ({ onMobileDrawerToggle }) => {
   const { user, logout } = useAuth();
@@ -67,94 +66,64 @@ export const TopBar = ({ onMobileDrawerToggle }) => {
           zIndex: (theme) => theme.zIndex.drawer + 1,
         }}
       >
-        <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, sm: 3 }, height: 72 }}>
-          {/* Left Side: Mobile Menu Toggle & Global Command Palette Button */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Toolbar sx={{ justifyContent: 'space-between', px: { xs: 2, sm: 3 }, height: 60, minHeight: '60px !important' }}>
+          {/* Left Side: Mobile Menu Toggle & Universal Search Bar Trigger */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <IconButton
               color="inherit"
               aria-label="open drawer"
               edge="start"
               onClick={onMobileDrawerToggle}
-              sx={{ display: { lg: 'none' }, color: BORROW_COLORS.textPrimary }}
+              sx={{ display: { lg: 'none' }, color: BORROW_COLORS.textPrimary, p: 0.75 }}
             >
-              <MenuIcon />
+              <MenuIcon sx={{ fontSize: 20 }} />
             </IconButton>
 
-            {/* Top Bar Quick Search Input Trigger */}
-            <Box
+            {/* Universal Search Bar Trigger */}
+            <UniversalSearchBar
+              placeholder="Search anything (Press Ctrl + K)..."
+              shortcutHint="Ctrl + K"
               onClick={openCommandPalette}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                backgroundColor: '#F8FAFC',
-                border: `1px solid ${BORROW_COLORS.border}`,
-                borderRadius: '12px',
-                px: 2,
-                py: 0.8,
-                width: { xs: 180, sm: 300, md: 380 },
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  backgroundColor: '#F1F5F9',
-                  borderColor: BORROW_COLORS.primary,
-                },
-              }}
-            >
-              <SearchIcon sx={{ color: BORROW_COLORS.primary, mr: 1, fontSize: 20 }} />
-              <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, flexGrow: 1, fontWeight: 500 }} noWrap>
-                Search anything (Press Ctrl + K)...
-              </Typography>
-              <Chip
-                label="Ctrl+K"
-                size="small"
-                sx={{
-                  height: 20,
-                  fontSize: '0.675rem',
-                  fontWeight: 800,
-                  backgroundColor: BORROW_COLORS.surface,
-                  color: BORROW_COLORS.textSecondary,
-                  border: `1px solid ${BORROW_COLORS.border}`,
-                }}
-              />
-            </Box>
+              width={{ xs: 180, sm: 280, md: 360 }}
+            />
           </Box>
 
-          {/* Right Side: System Health, Notifications & Librarian User Menu */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            {/* System Health Diagnostic Trigger */}
-            <Tooltip title="System Health & Operational Diagnostics">
-              <IconButton onClick={() => setHealthModalOpen(true)} sx={{ color: BORROW_COLORS.primary }}>
-                <SpeedIcon />
+          {/* Right Side: System Diagnostics, Notifications & Profile Menu */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* System Health Trigger */}
+            <Tooltip title="System Health & Diagnostics">
+              <IconButton size="small" onClick={() => setHealthModalOpen(true)} sx={{ color: BORROW_COLORS.primary, p: 1 }}>
+                <SpeedIcon sx={{ fontSize: 20 }} />
               </IconButton>
             </Tooltip>
 
             {/* Notifications Trigger */}
-            <Tooltip title="View Notifications & Announcements">
-              <IconButton onClick={() => navigate(ROUTES.NOTIFICATIONS)} sx={{ color: BORROW_COLORS.textSecondary }}>
+            <Tooltip title="Notifications">
+              <IconButton size="small" onClick={() => navigate(ROUTES.NOTIFICATIONS)} sx={{ color: BORROW_COLORS.textSecondary, p: 1 }}>
                 {unreadCount > 0 ? (
-                  <Badge badgeContent={unreadCount} color="primary">
-                    <NotificationsOutlinedIcon />
+                  <Badge badgeContent={unreadCount} color="primary" sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', height: 16, minWidth: 16 } }}>
+                    <NotificationsOutlinedIcon sx={{ fontSize: 20 }} />
                   </Badge>
                 ) : (
-                  <NotificationsOutlinedIcon />
+                  <NotificationsOutlinedIcon sx={{ fontSize: 20 }} />
                 )}
               </IconButton>
             </Tooltip>
 
-            {/* Librarian Profile Menu Button */}
+            {/* User Profile Menu Button */}
             <Box
               onClick={handleProfileMenuOpen}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1.5,
-                p: 0.75,
-                px: 1.25,
-                borderRadius: '12px',
+                gap: 1,
+                p: 0.5,
+                px: 1,
+                borderRadius: '6px',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.15s ease-in-out',
                 '&:hover': {
-                  backgroundColor: '#F8FAFC',
+                  backgroundColor: BORROW_COLORS.background,
                 },
               }}
             >
@@ -162,38 +131,38 @@ export const TopBar = ({ onMobileDrawerToggle }) => {
                 src={user?.photoURL || ''}
                 alt={user?.displayName || 'Librarian'}
                 sx={{
-                  width: 38,
-                  height: 38,
+                  width: 32,
+                  height: 32,
                   bgcolor: BORROW_COLORS.primary,
-                  fontWeight: 700,
-                  fontSize: '1rem',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
                 }}
               >
                 {userInitial}
               </Avatar>
 
               <Box sx={{ display: { xs: 'none', md: 'block' }, textAlign: 'left' }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.2, color: BORROW_COLORS.textPrimary }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: '0.8125rem', lineHeight: 1.2, color: BORROW_COLORS.textPrimary }}>
                   {user?.displayName || 'Lead Librarian'}
                 </Typography>
-                <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
+                <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted, fontSize: '0.71875rem', display: 'block' }}>
                   Admin Portal
                 </Typography>
               </Box>
             </Box>
 
-            {/* Profile Dropdown Menu */}
+            {/* Dropdown Menu */}
             <Menu
               anchorEl={anchorEl}
               open={openMenu}
               onClose={handleProfileMenuClose}
               onClick={handleProfileMenuClose}
               PaperProps={{
-                elevation: 4,
+                elevation: 0,
                 sx: {
-                  width: 220,
-                  mt: 1.5,
-                  borderRadius: '14px',
+                  width: 200,
+                  mt: 1,
+                  borderRadius: '8px',
                   border: `1px solid ${BORROW_COLORS.border}`,
                   boxShadow: BORROW_COLORS.cardShadow,
                 },
@@ -201,31 +170,31 @@ export const TopBar = ({ onMobileDrawerToggle }) => {
               transformOrigin={{ horizontal: 'right', vertical: 'top' }}
               anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
             >
-              <Box sx={{ px: 2, py: 1.5 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary }}>
+              <Box sx={{ px: 2, py: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: '0.8125rem', color: BORROW_COLORS.textPrimary }}>
                   {user?.displayName || 'Librarian Admin'}
                 </Typography>
-                <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }} noWrap>
+                <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted, fontSize: '0.71875rem' }} noWrap>
                   {user?.email || 'admin@borrow.com'}
                 </Typography>
               </Box>
               <Divider />
 
-              <MenuItem onClick={() => setHealthModalOpen(true)}>
+              <MenuItem onClick={() => setHealthModalOpen(true)} sx={{ fontSize: '0.8125rem' }}>
                 <ListItemIcon>
                   <SpeedIcon fontSize="small" sx={{ color: BORROW_COLORS.primary }} />
                 </ListItemIcon>
                 System Health
               </MenuItem>
 
-              <MenuItem onClick={() => navigate(ROUTES.SETTINGS)}>
+              <MenuItem onClick={() => navigate(ROUTES.SETTINGS)} sx={{ fontSize: '0.8125rem' }}>
                 <ListItemIcon>
                   <AccountCircleOutlinedIcon fontSize="small" />
                 </ListItemIcon>
                 Profile & Account
               </MenuItem>
 
-              <MenuItem onClick={() => navigate(ROUTES.SETTINGS)}>
+              <MenuItem onClick={() => navigate(ROUTES.SETTINGS)} sx={{ fontSize: '0.8125rem' }}>
                 <ListItemIcon>
                   <SettingsOutlinedIcon fontSize="small" />
                 </ListItemIcon>
@@ -234,18 +203,18 @@ export const TopBar = ({ onMobileDrawerToggle }) => {
 
               <Divider />
 
-              <MenuItem onClick={handleLogout} sx={{ color: BORROW_COLORS.error }}>
+              <MenuItem onClick={handleLogout} sx={{ color: BORROW_COLORS.error, fontSize: '0.8125rem' }}>
                 <ListItemIcon sx={{ color: BORROW_COLORS.error }}>
                   <LogoutOutlinedIcon fontSize="small" />
                 </ListItemIcon>
-                Log Out
+                Sign out
               </MenuItem>
             </Menu>
           </Box>
         </Toolbar>
       </AppBar>
 
-      {/* System Health Diagnostics Dialog */}
+      {/* System Health Modal */}
       <HealthDashboardModal open={healthModalOpen} onClose={() => setHealthModalOpen(false)} />
     </>
   );

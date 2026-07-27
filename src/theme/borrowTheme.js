@@ -1,27 +1,28 @@
 import { createTheme } from '@mui/material/styles';
 
-// Borrow Brand Colors
+// Linear / Notion / Stripe style Borrow Design Tokens
 export const BORROW_COLORS = {
   primary: '#2563EB',
   primaryLight: '#3B82F6',
   primaryDark: '#1D4ED8',
-  primaryGradient: 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-  primaryGradientHover: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%)',
+  primarySurface: '#EFF6FF',
   background: '#F8FAFC',
   surface: '#FFFFFF',
   textPrimary: '#0F172A',
-  textSecondary: '#64748B',
+  textSecondary: '#475569',
+  textMuted: '#94A3B8',
   border: '#E2E8F0',
-  success: '#22C55E',
+  borderLight: '#F1F5F9',
+  success: '#16A34A',
   successLight: '#DCFCE7',
-  warning: '#F59E0B',
-  warningLight: '#FEF3C7',
-  error: '#EF4444',
+  warning: '#EA580C',
+  warningLight: '#FFEDD5',
+  error: '#DC2626',
   errorLight: '#FEE2E2',
-  info: '#3B82F6',
-  infoLight: '#DBEAFE',
-  cardShadow: '0px 4px 20px rgba(15, 23, 42, 0.05)',
-  cardShadowHover: '0px 8px 30px rgba(37, 99, 235, 0.12)',
+  info: '#2563EB',
+  infoLight: '#EFF6FF',
+  cardShadow: '0px 1px 3px rgba(15, 23, 42, 0.05), 0px 1px 2px rgba(15, 23, 42, 0.04)',
+  cardShadowHover: '0px 4px 12px rgba(15, 23, 42, 0.08)',
 };
 
 const borrowTheme = createTheme({
@@ -43,6 +44,7 @@ const borrowTheme = createTheme({
     text: {
       primary: BORROW_COLORS.textPrimary,
       secondary: BORROW_COLORS.textSecondary,
+      disabled: BORROW_COLORS.textMuted,
     },
     divider: BORROW_COLORS.border,
     success: {
@@ -64,79 +66,89 @@ const borrowTheme = createTheme({
   typography: {
     fontFamily: '"Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     h1: {
-      fontWeight: 800,
+      fontWeight: 700,
       color: BORROW_COLORS.textPrimary,
-      fontSize: '2.25rem',
-      lineHeight: 1.2,
+      fontSize: '2rem',
+      lineHeight: 1.25,
+      letterSpacing: '-0.025em',
     },
     h2: {
       fontWeight: 700,
       color: BORROW_COLORS.textPrimary,
-      fontSize: '1.875rem',
-      lineHeight: 1.25,
-    },
-    h3: {
-      fontWeight: 700,
-      color: BORROW_COLORS.textPrimary,
       fontSize: '1.5rem',
       lineHeight: 1.3,
+      letterSpacing: '-0.02em',
     },
-    h4: {
+    h3: {
       fontWeight: 600,
       color: BORROW_COLORS.textPrimary,
       fontSize: '1.25rem',
       lineHeight: 1.35,
+      letterSpacing: '-0.015em',
     },
-    h5: {
+    h4: {
       fontWeight: 600,
       color: BORROW_COLORS.textPrimary,
       fontSize: '1.125rem',
       lineHeight: 1.4,
     },
-    h6: {
+    h5: {
       fontWeight: 600,
       color: BORROW_COLORS.textPrimary,
       fontSize: '1rem',
       lineHeight: 1.45,
     },
+    h6: {
+      fontWeight: 600,
+      color: BORROW_COLORS.textPrimary,
+      fontSize: '0.875rem',
+      lineHeight: 1.5,
+    },
     subtitle1: {
-      fontSize: '0.95rem',
+      fontSize: '0.875rem',
       color: BORROW_COLORS.textSecondary,
       fontWeight: 500,
+      lineHeight: 1.5,
     },
     subtitle2: {
-      fontSize: '0.85rem',
+      fontSize: '0.8125rem',
       color: BORROW_COLORS.textSecondary,
       fontWeight: 500,
+      lineHeight: 1.5,
     },
     body1: {
-      fontSize: '0.95rem',
+      fontSize: '0.875rem',
       color: BORROW_COLORS.textPrimary,
       lineHeight: 1.5,
     },
     body2: {
-      fontSize: '0.875rem',
+      fontSize: '0.8125rem',
       color: BORROW_COLORS.textSecondary,
       lineHeight: 1.5,
     },
     button: {
       textTransform: 'none',
-      fontWeight: 600,
-      fontSize: '0.9rem',
+      fontWeight: 500,
+      fontSize: '0.875rem',
+    },
+    caption: {
+      fontSize: '0.75rem',
+      color: BORROW_COLORS.textMuted,
+      lineHeight: 1.4,
     },
   },
   shape: {
-    borderRadius: 12,
+    borderRadius: 8,
   },
   shadows: [
     'none',
     '0px 1px 2px rgba(15, 23, 42, 0.04)',
-    '0px 2px 4px rgba(15, 23, 42, 0.04)',
-    '0px 4px 8px rgba(15, 23, 42, 0.05)',
+    '0px 1px 3px rgba(15, 23, 42, 0.05), 0px 1px 2px rgba(15, 23, 42, 0.04)',
+    '0px 4px 6px -1px rgba(15, 23, 42, 0.05), 0px 2px 4px -1px rgba(15, 23, 42, 0.03)',
     BORROW_COLORS.cardShadow,
-    '0px 6px 24px rgba(15, 23, 42, 0.08)',
+    '0px 10px 15px -3px rgba(15, 23, 42, 0.05), 0px 4px 6px -2px rgba(15, 23, 42, 0.025)',
     BORROW_COLORS.cardShadowHover,
-    ...Array(18).fill('0px 8px 30px rgba(15, 23, 42, 0.1)'),
+    ...Array(18).fill('0px 10px 15px -3px rgba(15, 23, 42, 0.05)'),
   ],
   components: {
     MuiCssBaseline: {
@@ -150,13 +162,13 @@ const borrowTheme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 16,
+          borderRadius: 12,
           boxShadow: BORROW_COLORS.cardShadow,
           border: `1px solid ${BORROW_COLORS.border}`,
           backgroundImage: 'none',
-          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'all 0.15s ease-in-out',
           '&:hover': {
-            boxShadow: BORROW_COLORS.cardShadowHover,
+            borderColor: '#CBD5E1',
           },
         },
       },
@@ -164,28 +176,28 @@ const borrowTheme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
-          padding: '8px 20px',
-          fontWeight: 600,
+          borderRadius: 8,
+          padding: '6px 14px',
+          fontWeight: 500,
           boxShadow: 'none',
-          transition: 'all 0.2s ease-in-out',
+          transition: 'all 0.15s ease-in-out',
           '&:hover': {
-            boxShadow: '0px 4px 12px rgba(37, 99, 235, 0.25)',
+            boxShadow: 'none',
           },
         },
         containedPrimary: {
-          background: BORROW_COLORS.primaryGradient,
+          backgroundColor: BORROW_COLORS.primary,
           color: '#FFFFFF',
           '&:hover': {
-            background: BORROW_COLORS.primaryGradientHover,
+            backgroundColor: BORROW_COLORS.primaryDark,
           },
         },
         outlinedPrimary: {
           borderColor: BORROW_COLORS.border,
-          color: BORROW_COLORS.primary,
+          color: BORROW_COLORS.textPrimary,
           '&:hover': {
-            borderColor: BORROW_COLORS.primary,
-            backgroundColor: 'rgba(37, 99, 235, 0.04)',
+            borderColor: BORROW_COLORS.textMuted,
+            backgroundColor: BORROW_COLORS.background,
           },
         },
       },
@@ -196,7 +208,7 @@ const borrowTheme = createTheme({
           backgroundImage: 'none',
         },
         rounded: {
-          borderRadius: 16,
+          borderRadius: 12,
         },
       },
     },
@@ -221,24 +233,27 @@ const borrowTheme = createTheme({
     MuiChip: {
       styleOverrides: {
         root: {
-          fontWeight: 600,
-          borderRadius: 8,
+          fontWeight: 500,
+          borderRadius: 6,
+          fontSize: '0.75rem',
         },
       },
     },
     MuiTableCell: {
       styleOverrides: {
         head: {
-          fontWeight: 700,
+          fontWeight: 600,
           color: BORROW_COLORS.textSecondary,
-          backgroundColor: '#F1F5F9',
-          fontSize: '0.8rem',
+          backgroundColor: BORROW_COLORS.background,
+          fontSize: '0.75rem',
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
+          borderBottom: `1px solid ${BORROW_COLORS.border}`,
         },
         body: {
-          fontSize: '0.875rem',
+          fontSize: '0.8125rem',
           color: BORROW_COLORS.textPrimary,
+          borderBottom: `1px solid ${BORROW_COLORS.border}`,
         },
       },
     },
@@ -246,16 +261,18 @@ const borrowTheme = createTheme({
       styleOverrides: {
         root: {
           '& .MuiOutlinedInput-root': {
-            borderRadius: 10,
+            borderRadius: 8,
+            fontSize: '0.875rem',
+            backgroundColor: BORROW_COLORS.surface,
             '& fieldset': {
               borderColor: BORROW_COLORS.border,
             },
             '&:hover fieldset': {
-              borderColor: BORROW_COLORS.primaryLight,
+              borderColor: BORROW_COLORS.textMuted,
             },
             '&.Mui-focused fieldset': {
               borderColor: BORROW_COLORS.primary,
-              borderWidth: 2,
+              borderWidth: 1.5,
             },
           },
         },

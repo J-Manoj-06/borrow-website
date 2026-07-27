@@ -6,21 +6,32 @@ import Typography from '@mui/material/Typography';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { motion } from 'framer-motion';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
+import PageHeader from './PageHeader';
 
-export const PageContainer = ({ children, title, subtitle, breadcrumbs = [], actions, sx = {} }) => {
+export const PageContainer = ({
+  children,
+  title,
+  subtitle,
+  breadcrumbs = [],
+  actions,
+  searchComponent,
+  filterComponent,
+  maxWidth = 1500,
+  sx = {},
+}) => {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.25, ease: 'easeOut' }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       style={{ width: '100%' }}
     >
-      <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1600, margin: '0 auto', ...sx }}>
+      <Box sx={{ p: { xs: 2, sm: 3, md: 3.5 }, maxWidth, margin: '0 auto', ...sx }}>
         {/* Breadcrumbs if provided */}
         {breadcrumbs.length > 0 && (
           <Breadcrumbs
-            separator={<NavigateNextIcon fontSize="small" sx={{ color: BORROW_COLORS.textSecondary }} />}
+            separator={<NavigateNextIcon fontSize="small" sx={{ color: BORROW_COLORS.textMuted }} />}
             sx={{ mb: 1.5 }}
           >
             {breadcrumbs.map((crumb, idx) => {
@@ -35,7 +46,7 @@ export const PageContainer = ({ children, title, subtitle, breadcrumbs = [], act
                   underline="hover"
                   color="inherit"
                   href={crumb.path}
-                  sx={{ fontSize: '0.8rem', color: BORROW_COLORS.textSecondary, fontWeight: 500 }}
+                  sx={{ fontSize: '0.8125rem', color: BORROW_COLORS.textSecondary, fontWeight: 500 }}
                 >
                   {crumb.label}
                 </Link>
@@ -44,32 +55,15 @@ export const PageContainer = ({ children, title, subtitle, breadcrumbs = [], act
           </Breadcrumbs>
         )}
 
-        {/* Page Header */}
-        {(title || actions) && (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', sm: 'row' },
-              alignItems: { xs: 'flex-start', sm: 'center' },
-              justifyContent: 'space-between',
-              gap: 2,
-              mb: 3.5,
-            }}
-          >
-            <Box>
-              {title && (
-                <Typography variant="h2" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary }}>
-                  {title}
-                </Typography>
-              )}
-              {subtitle && (
-                <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, mt: 0.5 }}>
-                  {subtitle}
-                </Typography>
-              )}
-            </Box>
-            {actions && <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>{actions}</Box>}
-          </Box>
+        {/* Standardized Page Header */}
+        {(title || actions || searchComponent || filterComponent) && (
+          <PageHeader
+            title={title}
+            subtitle={subtitle}
+            actionButton={actions}
+            searchComponent={searchComponent}
+            filterComponent={filterComponent}
+          />
         )}
 
         {children}

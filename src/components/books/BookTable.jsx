@@ -6,6 +6,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
 import Tooltip from '@mui/material/Tooltip';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
@@ -19,9 +20,15 @@ import { BORROW_COLORS } from '../../theme/borrowTheme';
 import CustomTable, { StatusChip } from '../common/CustomTable';
 import CustomDialog from '../common/CustomDialog';
 import CustomButton from '../common/CustomButton';
+import StatusBadge from '../common/StatusBadge';
 import { useBooks } from '../../hooks/useBooks';
 
-export const BookTable = ({ onEdit }) => {
+export const BookTable = ({
+  onEdit,
+  selectedBookIds = [],
+  onToggleSelectBook,
+  onToggleSelectAll,
+}) => {
   const {
     filteredBooks,
     loading,
@@ -33,7 +40,7 @@ export const BookTable = ({ onEdit }) => {
   } = useBooks();
 
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [anchorEl, setAnchorEl] = useState(null);
   const [activeMenuBook, setActiveMenuBook] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -79,21 +86,46 @@ export const BookTable = ({ onEdit }) => {
     setActiveMenuBook(null);
   };
 
+  const allPageIds = filteredBooks.slice(page * rowsPerPage, (page + 1) * rowsPerPage).map((b) => b.id);
+  const isAllPageSelected = allPageIds.length > 0 && allPageIds.every((id) => selectedBookIds.includes(id));
+
   const columns = [
+    {
+      id: 'select',
+      label: (
+        <Checkbox
+          size="small"
+          checked={isAllPageSelected}
+          indeterminate={selectedBookIds.length > 0 && !isAllPageSelected}
+          onChange={() => onToggleSelectAll && onToggleSelectAll(allPageIds)}
+          sx={{ p: 0, color: BORROW_COLORS.textMuted }}
+        />
+      ),
+      minWidth: 40,
+      width: 40,
+      format: (_, row) => (
+        <Checkbox
+          size="small"
+          checked={selectedBookIds.includes(row.id)}
+          onChange={() => onToggleSelectBook && onToggleSelectBook(row.id)}
+          onClick={(e) => e.stopPropagation()}
+          sx={{ p: 0, color: BORROW_COLORS.textMuted }}
+        />
+      ),
+    },
     {
       id: 'coverUrl',
       label: 'Cover',
-      minWidth: 70,
+      minWidth: 60,
       format: (val, row) => (
         <Box
           sx={{
-            width: 44,
-            height: 60,
-            borderRadius: '6px',
+            width: 36,
+            height: 48,
+            borderRadius: '4px',
             overflow: 'hidden',
             backgroundColor: '#F1F5F9',
             border: `1px solid ${BORROW_COLORS.border}`,
-            boxShadow: '0 2px 6px rgba(15, 23, 42, 0.08)',
           }}
         >
           <img
@@ -107,17 +139,17 @@ export const BookTable = ({ onEdit }) => {
     {
       id: 'title',
       label: 'Title & Author',
-      minWidth: 260,
+      minWidth: 240,
       format: (val, row) => (
         <Box
           onClick={() => selectBookForDetails(row)}
           sx={{ cursor: 'pointer', '&:hover': { color: BORROW_COLORS.primary } }}
         >
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary }}>
             {val}
           </Typography>
           <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-            by {row.author}
+            by {row.author || 'Unknown Author'}
           </Typography>
         </Box>
       ),
@@ -125,58 +157,50 @@ export const BookTable = ({ onEdit }) => {
     {
       id: 'category',
       label: 'Category',
-      minWidth: 160,
+      minWidth: 140,
       format: (val) => (
-        <Chip
-          label={val}
-          size="small"
-          variant="outlined"
-          sx={{ fontWeight: 600, fontSize: '0.75rem', borderColor: BORROW_COLORS.border }}
-        />
+        <Typography variant="caption" sx={{ px: 1, py: 0.25, borderRadius: '4px', border: `1px solid ${BORROW_COLORS.border}`, backgroundColor: BORROW_COLORS.background, fontWeight: 600, color: BORROW_COLORS.textSecondary }}>
+          {val || 'General'}
+        </Typography>
       ),
     },
     {
       id: 'isbn',
       label: 'ISBN',
-      minWidth: 140,
+      minWidth: 130,
       format: (val) => (
-        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, color: BORROW_COLORS.textSecondary }}>
+        <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: BORROW_COLORS.textSecondary }}>
           {val}
         </Typography>
       ),
     },
     {
       id: 'copies',
-      label: 'Copies (Tot / Avail / Borr)',
-      minWidth: 180,
-      format: (_, row) => (
-        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-          <Chip
-            label={`${row.availableCopies} avail`}
-            size="small"
-            sx={{
-              backgroundColor: row.availableCopies > 0 ? BORROW_COLORS.successLight : BORROW_COLORS.errorLight,
-              color: row.availableCopies > 0 ? BORROW_COLORS.success : BORROW_COLORS.error,
-              fontWeight: 700,
-              fontSize: '0.725rem',
-            }}
-          />
-          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-            / {row.totalCopies} total
-          </Typography>
-        </Box>
-      ),
+      label: 'Copies (Avail / Total)',
+      minWidth: 160,
+      format: (_, row) => {
+        const avail = row.availableCopies ?? 0;
+        const total = row.totalCopies ?? 1;
+        return (
+          <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
+            <StatusBadge status={avail > 0 ? 'Available' : 'Borrowed'} label={`${avail} avail`} size="small" />
+            <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
+              / {total}
+            </Typography>
+          </Box>
+        );
+      },
     },
     {
       id: 'status',
       label: 'Status',
-      minWidth: 120,
-      format: (val) => <StatusChip status={val} />,
+      minWidth: 110,
+      format: (val) => <StatusBadge status={val || 'Available'} size="small" />,
     },
     {
       id: 'updatedAt',
       label: 'Last Updated',
-      minWidth: 130,
+      minWidth: 120,
       format: (val) => (
         <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
           {val ? format(new Date(val), 'dd MMM yyyy') : 'N/A'}
@@ -186,7 +210,7 @@ export const BookTable = ({ onEdit }) => {
     {
       id: 'actions',
       label: 'Actions',
-      minWidth: 70,
+      minWidth: 60,
       align: 'right',
       format: (_, row) => (
         <IconButton size="small" onClick={(e) => handleMenuOpen(e, row)}>
@@ -211,7 +235,7 @@ export const BookTable = ({ onEdit }) => {
         }}
         emptyType="books"
         emptyTitle="No Books Found"
-        emptyDescription="There are no books matching your current search or filter criteria."
+        emptyDescription="There are no books matching your current search or active filters."
       />
 
       {/* Row Context Menu */}
@@ -222,47 +246,47 @@ export const BookTable = ({ onEdit }) => {
         PaperProps={{
           elevation: 0,
           sx: {
-            borderRadius: '12px',
-            minWidth: 180,
-            boxShadow: '0px 10px 30px rgba(15, 23, 42, 0.12)',
+            borderRadius: '8px',
+            minWidth: 170,
+            boxShadow: BORROW_COLORS.cardShadowHover,
             border: `1px solid ${BORROW_COLORS.border}`,
           },
         }}
       >
-        <MenuItem onClick={() => handleActionClick('view')}>
+        <MenuItem onClick={() => handleActionClick('view')} sx={{ fontSize: '0.8125rem' }}>
           <ListItemIcon><VisibilityOutlinedIcon fontSize="small" /></ListItemIcon>
           View Details
         </MenuItem>
 
-        <MenuItem onClick={() => handleActionClick('edit')}>
+        <MenuItem onClick={() => handleActionClick('edit')} sx={{ fontSize: '0.8125rem' }}>
           <ListItemIcon><EditOutlinedIcon fontSize="small" /></ListItemIcon>
           Edit Record
         </MenuItem>
 
-        <MenuItem onClick={() => handleActionClick('duplicate')}>
+        <MenuItem onClick={() => handleActionClick('duplicate')} sx={{ fontSize: '0.8125rem' }}>
           <ListItemIcon><FileCopyOutlinedIcon fontSize="small" /></ListItemIcon>
           Duplicate Record
         </MenuItem>
 
         {activeMenuBook?.isArchived ? (
-          <MenuItem onClick={() => handleActionClick('restore')} sx={{ color: BORROW_COLORS.success }}>
+          <MenuItem onClick={() => handleActionClick('restore')} sx={{ fontSize: '0.8125rem', color: BORROW_COLORS.success }}>
             <ListItemIcon><UnarchiveOutlinedIcon fontSize="small" sx={{ color: BORROW_COLORS.success }} /></ListItemIcon>
             Restore Book
           </MenuItem>
         ) : (
-          <MenuItem onClick={() => handleActionClick('archive')} sx={{ color: BORROW_COLORS.warning }}>
+          <MenuItem onClick={() => handleActionClick('archive')} sx={{ fontSize: '0.8125rem', color: BORROW_COLORS.warning }}>
             <ListItemIcon><ArchiveOutlinedIcon fontSize="small" sx={{ color: BORROW_COLORS.warning }} /></ListItemIcon>
             Archive Book
           </MenuItem>
         )}
 
-        <MenuItem onClick={() => handleActionClick('delete')} sx={{ color: BORROW_COLORS.error }}>
+        <MenuItem onClick={() => handleActionClick('delete')} sx={{ fontSize: '0.8125rem', color: BORROW_COLORS.error }}>
           <ListItemIcon><DeleteForeverOutlinedIcon fontSize="small" sx={{ color: BORROW_COLORS.error }} /></ListItemIcon>
           Delete Permanently
         </MenuItem>
       </Menu>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Dialog */}
       <CustomDialog
         open={deleteConfirmOpen}
         onClose={() => setDeleteConfirmOpen(false)}
@@ -270,10 +294,10 @@ export const BookTable = ({ onEdit }) => {
         subtitle={`Are you sure you want to permanently delete "${activeMenuBook?.title}" and all its physical copy records? This action cannot be undone.`}
         actions={
           <>
-            <CustomButton variant="outlined" onClick={() => setDeleteConfirmOpen(false)}>
+            <CustomButton variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
               Cancel
             </CustomButton>
-            <CustomButton variant="contained" color="error" onClick={handleConfirmDelete}>
+            <CustomButton variant="danger" onClick={handleConfirmDelete}>
               Delete Permanently
             </CustomButton>
           </>

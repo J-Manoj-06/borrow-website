@@ -5,26 +5,28 @@ import TableHead from '@mui/material/TableHead';
 import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
-import TablePagination from '@mui/material/TablePagination';
 import Paper from '@mui/material/Paper';
 import Skeleton from '@mui/material/Skeleton';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import EmptyState from './EmptyState';
+import StatusBadge from './StatusBadge';
+import PaginationComponent from './PaginationComponent';
 
 export const CustomTable = ({
   columns = [],
   data = [],
   loading = false,
   page = 0,
-  rowsPerPage = 5,
+  rowsPerPage = 10,
   totalCount,
   onPageChange,
   onRowsPerPageChange,
   emptyType = 'books',
   emptyTitle = 'No Records Found',
-  emptyDescription = 'There are no records matching your criteria.',
+  emptyDescription = 'There are no records matching your active filters.',
+  onRowClick,
+  sx = {},
 }) => {
   const displayData = totalCount !== undefined
     ? data
@@ -39,12 +41,14 @@ export const CustomTable = ({
         width: '100%',
         overflow: 'hidden',
         border: `1px solid ${BORROW_COLORS.border}`,
-        borderRadius: '16px',
+        borderRadius: '12px',
         backgroundColor: BORROW_COLORS.surface,
+        boxShadow: BORROW_COLORS.cardShadow,
+        ...sx,
       }}
     >
       <TableContainer sx={{ maxHeight: 600 }}>
-        <Table stickyHeader role="grid" aria-label="Library Data Management Table">
+        <Table stickyHeader role="grid" aria-label="Library Management Data Table">
           <TableHead>
             <TableRow>
               {columns.map((col) => (
@@ -62,18 +66,18 @@ export const CustomTable = ({
 
           <TableBody>
             {loading ? (
-              Array.from({ length: rowsPerPage }).map((_, index) => (
+              Array.from({ length: rowsPerPage > 5 ? 5 : rowsPerPage }).map((_, index) => (
                 <TableRow key={index}>
                   {columns.map((col) => (
                     <TableCell key={col.id}>
-                      <Skeleton variant="text" width="80%" height={24} />
+                      <Skeleton variant="text" width="75%" height={22} />
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : displayData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} align="center">
+                <TableCell colSpan={columns.length} align="center" sx={{ borderBottom: 'none' }}>
                   <EmptyState
                     type={emptyType}
                     title={emptyTitle}
@@ -87,15 +91,12 @@ export const CustomTable = ({
                   hover
                   tabIndex={0}
                   key={row.id || rowIndex}
+                  onClick={() => onRowClick && onRowClick(row)}
                   sx={{
-                    '&:last-child td, &:last-child th': { border: 0 },
-                    transition: 'background-color 0.15s ease',
+                    cursor: onRowClick ? 'pointer' : 'default',
+                    transition: 'background-color 0.15s ease-in-out',
                     '&:hover': {
-                      backgroundColor: 'rgba(37, 99, 235, 0.02)',
-                    },
-                    '&:focus-visible': {
-                      outline: `2px solid ${BORROW_COLORS.primary}`,
-                      outlineOffset: '-2px',
+                      backgroundColor: BORROW_COLORS.background,
                     },
                   }}
                 >
@@ -114,55 +115,19 @@ export const CustomTable = ({
         </Table>
       </TableContainer>
 
-      {onPageChange && (
-        <Box sx={{ borderTop: `1px solid ${BORROW_COLORS.border}` }}>
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25]}
-            component="div"
-            count={count}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={onPageChange}
-            onRowsPerPageChange={onRowsPerPageChange}
-          />
-        </Box>
+      {onPageChange && !loading && displayData.length > 0 && (
+        <PaginationComponent
+          count={count}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          onPageChange={onPageChange}
+          onRowsPerPageChange={onRowsPerPageChange}
+        />
       )}
     </Paper>
   );
 };
 
-export const StatusChip = ({ status }) => {
-  let color = BORROW_COLORS.textSecondary;
-  let bg = '#F1F5F9';
-
-  const normalized = String(status).toLowerCase();
-
-  if (['active', 'approved', 'available', 'returned', 'completed'].includes(normalized)) {
-    color = BORROW_COLORS.success;
-    bg = BORROW_COLORS.successLight;
-  } else if (['pending', 'in progress', 'borrowed', 'issued'].includes(normalized)) {
-    color = BORROW_COLORS.warning;
-    bg = BORROW_COLORS.warningLight;
-  } else if (['overdue', 'rejected', 'cancelled', 'lost', 'failed'].includes(normalized)) {
-    color = BORROW_COLORS.error;
-    bg = BORROW_COLORS.errorLight;
-  }
-
-  return (
-    <Chip
-      label={status}
-      size="small"
-      aria-label={`Status: ${status}`}
-      sx={{
-        backgroundColor: bg,
-        color: color,
-        fontWeight: 700,
-        fontSize: '0.75rem',
-        textTransform: 'capitalize',
-        px: 0.5,
-      }}
-    />
-  );
-};
+export const StatusChip = StatusBadge;
 
 export default CustomTable;

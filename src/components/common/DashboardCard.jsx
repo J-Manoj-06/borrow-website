@@ -4,12 +4,9 @@ import CardContent from '@mui/material/CardContent';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
-import { motion } from 'framer-motion';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
-
-const MotionCard = motion.create(Card);
 
 export const DashboardCard = ({
   title,
@@ -18,40 +15,43 @@ export const DashboardCard = ({
   trend,
   trendIsPositive = true,
   icon: Icon,
-  iconBgColor = 'rgba(37, 99, 235, 0.1)',
+  iconBgColor = BORROW_COLORS.primarySurface,
   iconColor = BORROW_COLORS.primary,
   onClick,
+  sx = {},
 }) => {
   return (
-    <MotionCard
-      whileHover={{ y: -4 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+    <Card
       onClick={onClick}
       sx={{
         cursor: onClick ? 'pointer' : 'default',
-        position: 'relative',
-        overflow: 'hidden',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        justify: 'space-between',
-        background: BORROW_COLORS.surface,
-        borderRadius: '16px',
+        justifyContent: 'space-between',
+        backgroundColor: BORROW_COLORS.surface,
+        borderRadius: '12px',
         border: `1px solid ${BORROW_COLORS.border}`,
-        p: 0.5,
+        boxShadow: BORROW_COLORS.cardShadow,
+        transition: 'all 0.15s ease-in-out',
+        '&:hover': {
+          borderColor: '#CBD5E1',
+          boxShadow: BORROW_COLORS.cardShadowHover,
+        },
+        ...sx,
       }}
     >
       <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
           <Typography variant="body2" sx={{ fontWeight: 600, color: BORROW_COLORS.textSecondary }}>
             {title}
           </Typography>
           {Icon && (
             <Box
               sx={{
-                width: 44,
-                height: 44,
-                borderRadius: '12px',
+                width: 36,
+                height: 36,
+                borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -59,40 +59,44 @@ export const DashboardCard = ({
                 color: iconColor,
               }}
             >
-              <Icon sx={{ fontSize: 24 }} />
+              <Icon sx={{ fontSize: 20 }} />
             </Box>
           )}
         </Box>
 
-        <Typography variant="h3" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary, mb: 1 }}>
+        <Typography variant="h2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary, mb: 1, letterSpacing: '-0.02em' }}>
           {value}
         </Typography>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {trend && (
-            <Chip
-              size="small"
-              icon={trendIsPositive ? <TrendingUpIcon fontSize="small" /> : <TrendingDownIcon fontSize="small" />}
-              label={trend}
-              sx={{
-                height: 24,
-                fontSize: '0.75rem',
-                backgroundColor: trendIsPositive ? BORROW_COLORS.successLight : BORROW_COLORS.errorLight,
-                color: trendIsPositive ? BORROW_COLORS.success : BORROW_COLORS.error,
-                '& .MuiChip-icon': {
+        {(trend || subtitle) && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            {trend && (
+              <Chip
+                size="small"
+                icon={trendIsPositive ? <TrendingUpIcon fontSize="small" /> : <TrendingDownIcon fontSize="small" />}
+                label={trend}
+                sx={{
+                  height: 22,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  backgroundColor: trendIsPositive ? BORROW_COLORS.successLight : BORROW_COLORS.errorLight,
                   color: trendIsPositive ? BORROW_COLORS.success : BORROW_COLORS.error,
-                },
-              }}
-            />
-          )}
-          {subtitle && (
-            <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 500 }}>
-              {subtitle}
-            </Typography>
-          )}
-        </Box>
+                  '& .MuiChip-icon': {
+                    color: trendIsPositive ? BORROW_COLORS.success : BORROW_COLORS.error,
+                    fontSize: 14,
+                  },
+                }}
+              />
+            )}
+            {subtitle && (
+              <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, fontWeight: 500 }}>
+                {subtitle}
+              </Typography>
+            )}
+          </Box>
+        )}
       </CardContent>
-    </MotionCard>
+    </Card>
   );
 };
 
