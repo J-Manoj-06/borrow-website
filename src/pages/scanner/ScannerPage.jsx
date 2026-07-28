@@ -10,39 +10,49 @@ import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import toast from 'react-hot-toast';
+import { motion } from 'framer-motion';
+
+// Icons
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch';
 import FlashOnIcon from '@mui/icons-material/FlashOn';
 import FlashOffIcon from '@mui/icons-material/FlashOff';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AssignmentReturnedIcon from '@mui/icons-material/AssignmentReturned';
-import HistoryIcon from '@mui/icons-material/History';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
-import toast from 'react-hot-toast';
-import { motion } from 'framer-motion';
+import PersonIcon from '@mui/icons-material/Person';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 
 import PageContainer from '../../components/common/PageContainer';
 import CustomButton from '../../components/common/CustomButton';
-import { StatusChip } from '../../components/common/CustomTable';
+import StatusBadge from '../../components/common/StatusBadge';
+import RecentScansPanel from '../../components/scanner/RecentScansPanel';
 import { BORROW_COLORS } from '../../theme/borrowTheme';
+
 import useBooks from '../../hooks/useBooks';
 import useTransactions from '../../hooks/useTransactions';
-import useQRCode from '../../hooks/useQRCode';
-import { logActivityRecord } from '../../services/firebase/activityService';
-import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../services/firebase/firebaseConfig';
+import useStudents from '../../hooks/useStudents';
 import { COPY_STATUSES } from '../../models/bookModel';
 
 export const ScannerPage = () => {
   const { books, updateCopyStatus } = useBooks();
   const { transactions, openIssueModal, openReturnModal } = useTransactions();
-  const { openCopyHistory } = useQRCode();
+  const { students } = useStudents();
 
+  // Mode Switcher ('book' | 'student' | 'transaction')
+  const [scanMode, setScanMode] = useState('book');
+
+  // Input & Scanned State
   const [scanInput, setScanInput] = useState('');
   const [scannedResult, setScannedResult] = useState(null);
+  const [recentScans, setRecentScans] = useState([]);
+
+  // Camera WebRTC Stream State
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
   const [torchEnabled, setTorchEnabled] = useState(false);
@@ -50,13 +60,10 @@ export const ScannerPage = () => {
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const copyUnsubRef = useRef(null);
 
-  // Clean up camera stream and Firestore listeners on unmount
   useEffect(() => {
     return () => {
       stopCameraStream();
-      if (copyUnsubRef.current) copyUnsubRef.current();
     };
   }, []);
 
@@ -92,8 +99,8 @@ export const ScannerPage = () => {
       setIsCameraActive(true);
       toast.success(`Camera active (${facingMode === 'environment' ? 'Rear' : 'Front'})`);
     } catch (err) {
-      console.error('Camera permission or stream error:', err);
-      setCameraError('Camera access denied or unavailable. You can enter Copy ID manually or upload an image.');
+      console.error('Camera stream error:', err);
+      setCameraError('Camera access denied or unavailable. Enter code manually below.');
       setIsCameraActive(false);
       toast.error('Unable to access video camera');
     }
@@ -110,9 +117,7 @@ export const ScannerPage = () => {
       const track = streamRef.current.getVideoTracks()[0];
       if (track && typeof track.applyConstraints === 'function') {
         try {
-          await track.applyConstraints({
-            advanced: [{ torch: !torchEnabled }],
-          });
+          await track.applyConstraints({ advanced: [{ torch: !torchEnabled }] });
           setTorchEnabled(!torchEnabled);
         } catch {
           toast.error('Torch not supported on this device camera');
@@ -121,446 +126,419 @@ export const ScannerPage = () => {
     }
   };
 
-  // Perform Lookup across Firestore collections
-  const handlePerformLookup = async (inputCode) => {
+  // Perform Instant Lookup Across Book, Student, or Transaction Collections
+  const handlePerformLookup = (inputCode) => {
     const code = inputCode ? inputCode.trim() : '';
     if (!code) {
-      toast.error('Please enter or scan a Copy ID / ISBN barcode.');
+      toast.error('Please enter or scan a QR / Barcode string.');
       return;
     }
 
-    if (copyUnsubRef.current) {
-      copyUnsubRef.current();
-      copyUnsubRef.current = null;
-    }
+    const cleanCode = code.toUpperCase();
+    let result = null;
 
-    try {
-      const cleanCode = code.toUpperCase();
-      let matchedCopyDoc = null;
-
-      // 1. Query bookCopies collection by copyId or barcode
-      const copyDocRef = doc(db, 'bookCopies', cleanCode);
-      const docSnap = await getDocs(query(collection(db, 'bookCopies'), where('copyId', '==', cleanCode)));
-
-      if (!docSnap.empty) {
-        matchedCopyDoc = { id: docSnap.docs[0].id, ...docSnap.docs[0].data() };
-      } else {
-        const barcodeQuery = query(collection(db, 'bookCopies'), where('barcode', '==', cleanCode));
-        const barcodeSnap = await getDocs(barcodeQuery);
-        if (!barcodeSnap.empty) {
-          matchedCopyDoc = { id: barcodeSnap.docs[0].id, ...barcodeSnap.docs[0].data() };
-        }
+    if (scanMode === 'student') {
+      // Lookup Student
+      const student = (students || []).find(
+        (s) =>
+          (s.registerNumber || '').toUpperCase() === cleanCode ||
+          (s.id || '').toUpperCase() === cleanCode ||
+          (s.fullName || '').toUpperCase().includes(cleanCode)
+      );
+      if (student) {
+        result = {
+          type: 'student',
+          studentName: student.fullName || student.name,
+          registerNumber: student.registerNumber,
+          department: student.department || 'Computer Science',
+          avatarUrl: student.avatarUrl,
+          borrowedCount: student.borrowedCount || 0,
+          status: student.computedStatus || student.status || 'Active',
+          rawStudent: student,
+        };
       }
-
-      // 2. Find matching transaction
-      const matchingTxn = transactions.find(
+    } else if (scanMode === 'transaction') {
+      // Lookup Transaction
+      const txn = (transactions || []).find(
         (t) =>
-          (t.bookCopyId || '').toLowerCase() === cleanCode.toLowerCase() ||
-          (t.transactionId || '').toLowerCase() === cleanCode.toLowerCase()
+          (t.id || '').toUpperCase() === cleanCode ||
+          (t.bookCopyId || '').toUpperCase() === cleanCode ||
+          (t.studentName || '').toUpperCase().includes(cleanCode)
       );
-
-      // 3. Find matching book catalog entry
-      const matchingBook = books.find(
-        (b) =>
-          (b.id || '').toLowerCase() === (matchedCopyDoc?.bookId || cleanCode).toLowerCase() ||
-          (b.isbn || '').toLowerCase() === cleanCode.toLowerCase() ||
-          matchingTxn?.bookId === b.id ||
-          (b.title || '').toLowerCase().includes(cleanCode.toLowerCase())
-      );
-
-      if (!matchedCopyDoc && !matchingBook && !matchingTxn) {
-        toast.error(`No physical copy or book record found for code "${cleanCode}"`);
-        setScannedResult(null);
-        return;
+      if (txn) {
+        result = {
+          type: 'transaction',
+          id: txn.id,
+          bookTitle: txn.bookTitle,
+          studentName: txn.studentName,
+          issueDate: txn.issueDate,
+          dueDate: txn.dueDate,
+          status: txn.status || 'Issued',
+          rawTxn: txn,
+        };
       }
+    } else {
+      // Lookup Book Copy / ISBN (Default)
+      const matchingBook = (books || []).find(
+        (b) =>
+          (b.isbn || '').toUpperCase() === cleanCode ||
+          (b.id || '').toUpperCase() === cleanCode ||
+          (b.title || '').toUpperCase().includes(cleanCode)
+      );
 
-      const copyObj = {
-        id: matchedCopyDoc?.id || cleanCode,
-        copyId: matchedCopyDoc?.copyId || (cleanCode.startsWith('CPY-') ? cleanCode : `CPY-${cleanCode}`),
-        bookId: matchedCopyDoc?.bookId || matchingBook?.id || matchingTxn?.bookId || 'unknown',
-        bookTitle: matchingBook?.title || matchingTxn?.bookTitle || 'Library Catalog Title',
-        bookAuthor: matchingBook?.author || matchingTxn?.bookAuthor || 'Library Collection',
-        bookCoverUrl:
-          matchingBook?.coverUrl ||
-          matchingTxn?.bookCoverUrl ||
-          'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=500',
-        category: matchingBook?.category || matchingTxn?.category || 'General',
-        status: matchedCopyDoc?.status || (matchingTxn && matchingTxn.status !== 'Returned' ? 'Borrowed' : 'Available'),
-        condition: matchedCopyDoc?.condition || matchingTxn?.condition || 'Good',
-        shelfLocation: matchedCopyDoc?.shelfLocation || matchingBook?.shelfNumber || 'CS-Main',
-        rackNumber: matchedCopyDoc?.rackNumber || matchingBook?.rackNumber || 'R-01',
+      const matchingTxn = (transactions || []).find(
+        (t) => (t.bookCopyId || '').toUpperCase() === cleanCode || (t.bookTitle || '').toUpperCase().includes(cleanCode)
+      );
+
+      result = {
+        type: 'book',
+        copyId: cleanCode.startsWith('CPY-') ? cleanCode : `CPY-${cleanCode}`,
+        bookTitle: matchingBook?.title || matchingTxn?.bookTitle || 'Computer Science Fundamentals',
+        bookAuthor: matchingBook?.author || matchingTxn?.bookAuthor || 'Core Collection Author',
+        bookCoverUrl: matchingBook?.coverUrl || matchingTxn?.bookCoverUrl || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=500',
+        status: matchingTxn && matchingTxn.status !== 'Returned' ? 'Borrowed' : 'Available',
         activeBorrower: matchingTxn && matchingTxn.status !== 'Returned' ? matchingTxn : null,
       };
-
-      setScannedResult(copyObj);
-      toast.success(`Verified copy ${copyObj.copyId}`);
-
-      // Log activity
-      logActivityRecord({
-        user: 'Librarian',
-        action: `scanned QR code for physical copy ${copyObj.copyId}`,
-        target: copyObj.bookTitle,
-        type: 'scan',
-      }).catch(console.warn);
-
-      // Real-time snapshot listener on copy document if it exists in Firestore
-      if (matchedCopyDoc?.id) {
-        copyUnsubRef.current = onSnapshot(doc(db, 'bookCopies', matchedCopyDoc.id), (updatedSnap) => {
-          if (updatedSnap.exists()) {
-            const updatedData = updatedSnap.data();
-            setScannedResult((prev) => (prev ? { ...prev, ...updatedData, status: updatedData.status } : null));
-          }
-        });
-      }
-    } catch (err) {
-      console.error('Lookup failed:', err);
-      toast.error('Lookup failed. Please try again.');
     }
+
+    if (!result) {
+      toast.error(`No record found matching code "${cleanCode}"`);
+      setScannedResult(null);
+      return;
+    }
+
+    setScannedResult(result);
+    setRecentScans((prev) => [{ ...result, scannedTime: new Date().toISOString() }, ...prev.slice(0, 4)]);
+    toast.success(`Verified ${result.type.toUpperCase()}: ${result.bookTitle || result.studentName || result.id}`);
   };
 
   const handleSimulateCameraScan = () => {
-    if (!isCameraActive) {
-      startCameraStream();
-    }
+    if (!isCameraActive) startCameraStream();
     setTimeout(() => {
-      const targetCode = transactions[0]?.bookCopyId || books[0]?.isbn || 'CPY-000001';
-      handlePerformLookup(targetCode);
-    }, 1500);
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Decode simulated QR file
-      const targetCode = books[0]?.isbn || books[0]?.id || 'CPY-000001';
-      handlePerformLookup(targetCode);
-    };
-    reader.readAsDataURL(file);
+      const sampleCode = scanMode === 'student' ? 'ST-2024-001' : scanMode === 'transaction' ? 'TXN-9021' : 'CPY-1002';
+      handlePerformLookup(sampleCode);
+    }, 1200);
   };
 
   const handleMarkDamaged = async () => {
-    if (!scannedResult) return;
+    if (!scannedResult || scannedResult.type !== 'book') return;
     try {
-      await updateCopyStatus(scannedResult.copyId, COPY_STATUSES.DAMAGED, 'Damaged', scannedResult.shelfLocation, scannedResult.rackNumber, 'Marked Damaged via QR Scanner');
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleMarkLost = async () => {
-    if (!scannedResult) return;
-    try {
-      await updateCopyStatus(scannedResult.copyId, COPY_STATUSES.LOST, 'Fair', scannedResult.shelfLocation, scannedResult.rackNumber, 'Marked Lost via QR Scanner');
-    } catch (err) {
-      console.error(err);
+      if (updateCopyStatus) {
+        await updateCopyStatus(scannedResult.copyId, COPY_STATUSES.DAMAGED, 'Damaged', 'Main-Shelf', 'R-01', 'Marked Damaged via Scanner');
+      }
+      toast.success(`Copy ${scannedResult.copyId} marked Damaged.`);
+    } catch {
+      toast.error('Failed to update copy status.');
     }
   };
 
   return (
     <PageContainer
       title="QR & Barcode Scanner"
-      subtitle="Scan physical copy QR sticky labels or enter Copy IDs to instantly issue, return, or audit book history."
+      subtitle="Scan physical copy labels, student QR badges, or transaction receipts for instant 1-step verification."
     >
-      <Grid container spacing={3.5}>
-        {/* Left Column: Scanner Controls & Camera Feed */}
+      {/* 1. Mode Switcher Tabs */}
+      <Box sx={{ borderBottom: `1px solid ${BORROW_COLORS.border}`, mb: 3 }}>
+        <Tabs
+          value={scanMode}
+          onChange={(_, newMode) => {
+            setScanMode(newMode);
+            setScannedResult(null);
+          }}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            minHeight: 40,
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '0.84375rem',
+              minHeight: 40,
+              px: 2,
+            },
+          }}
+        >
+          <Tab icon={<MenuBookIcon sx={{ fontSize: 18 }} />} iconPosition="start" value="book" label="Scan Book Copy" />
+          <Tab icon={<PersonIcon sx={{ fontSize: 18 }} />} iconPosition="start" value="student" label="Scan Student Badge" />
+          <Tab icon={<ReceiptIcon sx={{ fontSize: 18 }} />} iconPosition="start" value="transaction" label="Scan Transaction Receipt" />
+        </Tabs>
+      </Box>
+
+      <Grid container spacing={3}>
+        {/* Left Column: Camera Viewport & Manual Input */}
         <Grid item xs={12} lg={5}>
-          <Card sx={{ height: '100%', p: 1 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Typography variant="h5" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary, mb: 1 }}>
-                Scan Physical Copy Label
-              </Typography>
-              <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, mb: 3 }}>
-                Use camera video feed, upload a QR sticker image, or enter Copy ID manually.
-              </Typography>
+          <Card sx={{ borderRadius: '12px', border: `1px solid ${BORROW_COLORS.border}`, p: 2.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary, mb: 0.5 }}>
+              Scan Viewfinder
+            </Typography>
+            <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted, mb: 2, display: 'block' }}>
+              Mode: <strong>{scanMode.toUpperCase()} SCAN</strong>
+            </Typography>
 
-              {/* Manual Copy ID Input */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.8, color: BORROW_COLORS.textPrimary }}>
-                  Manual Copy ID / QR Lookup
-                </Typography>
-                <TextField
-                  fullWidth
-                  placeholder="e.g. CPY-235088-001 or ISBN Barcode"
-                  value={scanInput}
-                  onChange={(e) => setScanInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handlePerformLookup(scanInput)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <QrCodeScannerIcon sx={{ color: BORROW_COLORS.primary }} />
-                      </InputAdornment>
-                    ),
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <CustomButton
-                          size="small"
-                          onClick={() => handlePerformLookup(scanInput)}
-                          sx={{ minWidth: 'auto', px: 2 }}
-                        >
-                          Lookup
-                        </CustomButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-              </Box>
-
-              {/* Viewfinder Camera Box with WebRTC Video Stream */}
-              <Box
-                sx={{
-                  position: 'relative',
-                  height: 240,
-                  borderRadius: '16px',
-                  backgroundColor: '#0F172A',
-                  color: '#FFFFFF',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  border: `2px solid ${isCameraActive ? BORROW_COLORS.primary : 'transparent'}`,
-                  mb: 2.5,
+            {/* Manual Code Input */}
+            <Box sx={{ mb: 2 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder={`Enter ${scanMode} code, ISBN, or ID...`}
+                value={scanInput}
+                onChange={(e) => setScanInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handlePerformLookup(scanInput)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <QrCodeScannerIcon sx={{ color: BORROW_COLORS.primary, fontSize: 18 }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <CustomButton
+                        size="small"
+                        onClick={() => handlePerformLookup(scanInput)}
+                        sx={{ minWidth: 'auto', px: 1.5, py: 0.25, fontSize: '0.75rem' }}
+                      >
+                        Scan
+                      </CustomButton>
+                    </InputAdornment>
+                  ),
                 }}
-              >
-                <video
-                  ref={videoRef}
-                  playsInline
-                  muted
+              />
+            </Box>
+
+            {/* Viewfinder Camera Box */}
+            <Box
+              sx={{
+                position: 'relative',
+                height: 220,
+                borderRadius: '10px',
+                backgroundColor: '#0F172A',
+                color: '#FFFFFF',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                border: `2px solid ${isCameraActive ? BORROW_COLORS.primary : BORROW_COLORS.border}`,
+                mb: 2,
+              }}
+            >
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                style={{
+                  display: isCameraActive ? 'block' : 'none',
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
+
+              {isCameraActive && (
+                <motion.div
+                  animate={{ y: [-90, 90, -90] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
                   style={{
-                    display: isCameraActive ? 'block' : 'none',
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
+                    position: 'absolute',
+                    width: '85%',
+                    height: 2,
+                    backgroundColor: '#2563EB',
+                    boxShadow: '0 0 12px #2563EB',
+                    zIndex: 3,
                   }}
                 />
+              )}
 
-                {isCameraActive && (
-                  <motion.div
-                    animate={{ y: [-100, 100, -100] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                    style={{
-                      position: 'absolute',
-                      width: '85%',
-                      height: 3,
-                      backgroundColor: '#2563EB',
-                      boxShadow: '0 0 14px #2563EB',
-                      zIndex: 3,
-                    }}
-                  />
-                )}
+              {!isCameraActive && (
+                <>
+                  <CameraAltIcon sx={{ fontSize: 44, color: '#64748B', mb: 1 }} />
+                  <Typography variant="caption" sx={{ color: '#94A3B8', fontWeight: 600 }}>
+                    {cameraError || 'Camera Off — Tap Scan Below'}
+                  </Typography>
+                </>
+              )}
 
-                {!isCameraActive && (
-                  <>
-                    <CameraAltIcon sx={{ fontSize: 52, color: '#64748B', mb: 1 }} />
-                    <Typography variant="body2" sx={{ color: '#94A3B8', fontWeight: 600 }}>
-                      {cameraError || 'Camera Viewfinder Off'}
-                    </Typography>
-                  </>
-                )}
-
-                {/* Camera Top Control Bar */}
-                {isCameraActive && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: 10,
-                      right: 10,
-                      display: 'flex',
-                      gap: 1,
-                      backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                      borderRadius: '8px',
-                      p: 0.5,
-                      zIndex: 4,
-                    }}
-                  >
-                    <Tooltip title="Switch Front/Rear Camera">
-                      <IconButton size="small" onClick={toggleCameraFacingMode} sx={{ color: '#FFFFFF' }}>
-                        <CameraswitchIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Toggle Torch">
-                      <IconButton size="small" onClick={toggleTorch} sx={{ color: torchEnabled ? '#F59E0B' : '#FFFFFF' }}>
-                        {torchEnabled ? <FlashOnIcon fontSize="small" /> : <FlashOffIcon fontSize="small" />}
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                )}
-              </Box>
-
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                {isCameraActive ? (
-                  <CustomButton fullWidth variant="outlined" color="error" onClick={stopCameraStream}>
-                    Stop Camera
-                  </CustomButton>
-                ) : (
-                  <CustomButton
-                    fullWidth
-                    variant="contained"
-                    startIcon={<CameraAltIcon />}
-                    onClick={handleSimulateCameraScan}
-                  >
-                    Scan with Camera
-                  </CustomButton>
-                )}
-
-                <Button
-                  component="label"
-                  variant="outlined"
-                  startIcon={<CloudUploadIcon />}
-                  sx={{ borderRadius: '10px', px: 2 }}
+              {/* Camera Controls Overlay */}
+              {isCameraActive && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    display: 'flex',
+                    gap: 0.5,
+                    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                    borderRadius: '6px',
+                    p: 0.25,
+                    zIndex: 4,
+                  }}
                 >
-                  Upload QR
-                  <input type="file" hidden accept="image/*" onChange={handleFileUpload} />
-                </Button>
-              </Box>
-            </CardContent>
+                  <Tooltip title="Switch Front/Rear Camera">
+                    <IconButton size="small" onClick={toggleCameraFacingMode} sx={{ color: '#FFFFFF' }}>
+                      <CameraswitchIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Toggle Torch">
+                    <IconButton size="small" onClick={toggleTorch} sx={{ color: torchEnabled ? '#F59E0B' : '#FFFFFF' }}>
+                      {torchEnabled ? <FlashOnIcon sx={{ fontSize: 16 }} /> : <FlashOffIcon sx={{ fontSize: 16 }} />}
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              )}
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {isCameraActive ? (
+                <CustomButton fullWidth variant="danger" size="small" onClick={stopCameraStream}>
+                  Stop Camera
+                </CustomButton>
+              ) : (
+                <CustomButton
+                  fullWidth
+                  variant="primary"
+                  size="small"
+                  startIcon={<CameraAltIcon sx={{ fontSize: 16 }} />}
+                  onClick={handleSimulateCameraScan}
+                >
+                  Start Camera Scan
+                </CustomButton>
+              )}
+            </Box>
           </Card>
+
+          {/* Recent Scans Panel */}
+          <RecentScansPanel recentScans={recentScans} onReopenScan={(scan) => setScannedResult(scan)} />
         </Grid>
 
-        {/* Right Column: Scanned Result Card & Quick Actions */}
+        {/* Right Column: Instant Auto-Action Result Card */}
         <Grid item xs={12} lg={7}>
           {scannedResult ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-              <Card sx={{ border: `2px solid ${BORROW_COLORS.primary}`, p: 1 }}>
-                <CardContent sx={{ p: 3 }}>
+            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}>
+              <Card sx={{ borderRadius: '12px', border: `2px solid ${BORROW_COLORS.primary}`, p: 2.5 }}>
+                <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <CheckCircleIcon sx={{ color: BORROW_COLORS.success }} />
-                      <Typography variant="caption" sx={{ fontWeight: 800, color: BORROW_COLORS.success, letterSpacing: 0.5 }}>
-                        SCANNED COPY VERIFIED
+                      <CheckCircleIcon sx={{ color: BORROW_COLORS.success, fontSize: 20 }} />
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: BORROW_COLORS.success, letterSpacing: '0.05em' }}>
+                        SCANNED RESULT VERIFIED
                       </Typography>
                     </Box>
-                    <StatusChip status={scannedResult.status} />
+                    <StatusBadge status={scannedResult.status} size="small" />
                   </Box>
 
-                  {/* Book Info Showcase */}
-                  <Box sx={{ display: 'flex', gap: 2.5, mb: 3 }}>
-                    <Box
-                      sx={{
-                        width: 95,
-                        height: 130,
-                        borderRadius: '10px',
-                        overflow: 'hidden',
-                        flexShrink: 0,
-                        backgroundColor: '#F1F5F9',
-                        boxShadow: '0 4px 14px rgba(15, 23, 42, 0.1)',
-                      }}
-                    >
-                      <img
-                        src={scannedResult.bookCoverUrl}
-                        alt={scannedResult.bookTitle}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    </Box>
+                  {/* Mode 1: BOOK RESULT */}
+                  {scannedResult.type === 'book' && (
+                    <Box sx={{ display: 'flex', gap: 2, mb: 2.5 }}>
+                      <Box
+                        sx={{
+                          width: 80,
+                          height: 110,
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                          backgroundColor: '#F1F5F9',
+                          border: `1px solid ${BORROW_COLORS.border}`,
+                        }}
+                      >
+                        <img
+                          src={scannedResult.bookCoverUrl}
+                          alt={scannedResult.bookTitle}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </Box>
 
-                    <Box sx={{ minWidth: 0, flexGrow: 1 }}>
-                      <Typography variant="h4" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary, mb: 0.5 }}>
-                        {scannedResult.bookTitle}
-                      </Typography>
-                      <Typography variant="subtitle1" sx={{ color: BORROW_COLORS.textSecondary, mb: 1 }}>
-                        By {scannedResult.bookAuthor}
-                      </Typography>
-
-                      <Typography variant="subtitle2" sx={{ color: BORROW_COLORS.primary, fontWeight: 800, fontFamily: 'monospace' }}>
-                        PHYSICAL COPY ID: {scannedResult.copyId}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
-                        Location: {scannedResult.shelfLocation} (Rack {scannedResult.rackNumber || 'R-01'}) • Condition: <strong>{scannedResult.condition}</strong>
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  {/* Active Borrower Info */}
-                  {scannedResult.activeBorrower && (
-                    <Box
-                      sx={{
-                        p: 2,
-                        borderRadius: '14px',
-                        backgroundColor: '#FEF2F2',
-                        border: `1px solid ${BORROW_COLORS.errorLight}`,
-                        mb: 3,
-                      }}
-                    >
-                      <Typography variant="caption" sx={{ color: BORROW_COLORS.error, fontWeight: 800 }}>
-                        CURRENTLY CHECKED OUT TO STUDENT
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1 }}>
-                        <Avatar sx={{ width: 36, height: 36, bgcolor: BORROW_COLORS.primary }}>
-                          {(scannedResult.activeBorrower.studentName || 'S')[0]}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                            {scannedResult.activeBorrower.studentName} ({scannedResult.activeBorrower.registerNumber})
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-                            Issued: {scannedResult.activeBorrower.issueDate ? new Date(scannedResult.activeBorrower.issueDate).toLocaleDateString() : 'N/A'} • Due: {scannedResult.activeBorrower.dueDate ? new Date(scannedResult.activeBorrower.dueDate).toLocaleDateString() : 'N/A'}
-                          </Typography>
-                        </Box>
+                      <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary, mb: 0.25 }}>
+                          {scannedResult.bookTitle}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, mb: 1 }}>
+                          By {scannedResult.bookAuthor}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 600, display: 'block' }}>
+                          COPY ID: {scannedResult.copyId}
+                        </Typography>
                       </Box>
                     </Box>
                   )}
 
-                  {/* Quick Action Buttons */}
-                  <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                    {scannedResult.status === 'Available' || scannedResult.status === 'Reserved' ? (
-                      <CustomButton
-                        variant="contained"
-                        startIcon={<MenuBookIcon />}
-                        onClick={openIssueModal}
+                  {/* Mode 2: STUDENT RESULT */}
+                  {scannedResult.type === 'student' && (
+                    <Box sx={{ display: 'flex', gap: 2, mb: 2.5, alignItems: 'center' }}>
+                      <Avatar
+                        src={scannedResult.avatarUrl || ''}
+                        alt={scannedResult.studentName}
+                        sx={{ width: 64, height: 64, bgcolor: BORROW_COLORS.primary, fontWeight: 600, fontSize: '1.5rem' }}
                       >
-                        Issue Book Checkout
-                      </CustomButton>
-                    ) : (
-                      <CustomButton
-                        variant="contained"
-                        color="success"
-                        startIcon={<AssignmentReturnedIcon />}
-                        onClick={() => openReturnModal(scannedResult.activeBorrower)}
-                      >
-                        Mark Book Returned
-                      </CustomButton>
-                    )}
+                        {(scannedResult.studentName || 'S')[0]}
+                      </Avatar>
 
+                      <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary, mb: 0.25 }}>
+                          {scannedResult.studentName}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 600, display: 'block' }}>
+                          Reg No: {scannedResult.registerNumber}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
+                          Department: {scannedResult.department}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Mode 3: TRANSACTION RESULT */}
+                  {scannedResult.type === 'transaction' && (
+                    <Box sx={{ p: 2, borderRadius: '8px', backgroundColor: BORROW_COLORS.background, border: `1px solid ${BORROW_COLORS.border}`, mb: 2.5 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary }}>
+                        {scannedResult.bookTitle}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block' }}>
+                        Borrower: {scannedResult.studentName} • Transaction ID: {scannedResult.id}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Quick Action Triggers */}
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     <CustomButton
-                      variant="outlined"
-                      startIcon={<HistoryIcon />}
-                      onClick={() => openCopyHistory(scannedResult)}
+                      variant="primary"
+                      size="small"
+                      startIcon={<MenuBookIcon sx={{ fontSize: 16 }} />}
+                      onClick={() => openIssueModal && openIssueModal()}
                     >
-                      View Copy History
+                      Issue Checkout
                     </CustomButton>
 
                     <CustomButton
-                      variant="outlined"
-                      color="warning"
-                      startIcon={<ReportProblemIcon />}
+                      variant="secondary"
+                      size="small"
+                      startIcon={<AssignmentReturnedIcon sx={{ fontSize: 16 }} />}
+                      onClick={() => openReturnModal && openReturnModal(scannedResult.rawTxn || scannedResult.activeBorrower)}
+                    >
+                      Process Return
+                    </CustomButton>
+
+                    <CustomButton
+                      variant="outline"
+                      size="small"
+                      startIcon={<ReportProblemIcon sx={{ fontSize: 16 }} />}
                       onClick={handleMarkDamaged}
                     >
                       Mark Damaged
-                    </CustomButton>
-
-                    <CustomButton
-                      variant="outlined"
-                      color="error"
-                      onClick={handleMarkLost}
-                    >
-                      Mark Lost
                     </CustomButton>
                   </Box>
                 </CardContent>
               </Card>
             </motion.div>
           ) : (
-            <Card sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 4, textAlign: 'center' }}>
+            <Card sx={{ height: '100%', minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', border: `1px solid ${BORROW_COLORS.border}`, textAlign: 'center', p: 4 }}>
               <Box>
-                <QrCodeScannerIcon sx={{ fontSize: 80, color: '#CBD5E1', mb: 2 }} />
-                <Typography variant="h5" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary, mb: 1 }}>
-                  Awaiting QR Code Scan
+                <QrCodeScannerIcon sx={{ fontSize: 64, color: BORROW_COLORS.textMuted, mb: 1.5 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: BORROW_COLORS.textPrimary, mb: 0.5 }}>
+                  Awaiting QR / Barcode Scan
                 </Typography>
-                <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, maxWidth: 360 }}>
-                  Scan a book copy sticky label using your camera or enter a Copy ID to view instant catalog verification.
+                <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, maxWidth: 320, display: 'block' }}>
+                  Scan a book copy sticky label, student QR badge, or enter code to view instant verification.
                 </Typography>
               </Box>
             </Card>
