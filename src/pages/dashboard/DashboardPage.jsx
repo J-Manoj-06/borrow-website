@@ -37,6 +37,14 @@ import CustomButton from '../../components/common/CustomButton';
 import CustomTable, { StatusChip } from '../../components/common/CustomTable';
 import CustomDialog from '../../components/common/CustomDialog';
 import { ROUTES } from '../../constants/routes';
+import { uploadFileWithProgress } from '../../services/firebase/storageService';
+import LinearProgress from '@mui/material/LinearProgress';
+import Chip from '@mui/material/Chip';
+import Autocomplete from '@mui/material/Autocomplete';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import DeleteIcon from '@mui/icons-material/Delete';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { BOOK_CATEGORIES } from '../../models/bookModel';
 
 import useBooks from '../../hooks/useBooks';
 import useBorrowRequests from '../../hooks/useBorrowRequests';
@@ -68,6 +76,13 @@ export const DashboardPage = () => {
   const [newBookIsbn, setNewBookIsbn] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
   const [newBookCategory, setNewBookCategory] = useState('Computer Science');
+  const [newBookCustomCategory, setNewBookCustomCategory] = useState('');
+  const [newBookTotalCopies, setNewBookTotalCopies] = useState(1);
+  const [newBookCoverFile, setNewBookCoverFile] = useState(null);
+  const [newBookCoverPreview, setNewBookCoverPreview] = useState('');
+  const [newBookUploading, setNewBookUploading] = useState(false);
+  const [newBookProgress, setNewBookProgress] = useState(0);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [issueStudentId, setIssueStudentId] = useState('');
   const [issueBookId, setIssueBookId] = useState('');
   const [returnTransactionId, setReturnTransactionId] = useState('');
@@ -115,27 +130,84 @@ export const DashboardPage = () => {
     }
   };
 
-  const handleCreateBookSubmit = async () => {
-    if (!newBookTitle || !newBookIsbn) {
-      toast.error('Please fill in book title and ISBN');
+  const handleCoverFileSelect = (file) => {
+    if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Unsupported file format. Please select a PNG, JPG, JPEG, or WEBP image.');
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size exceeds 10MB limit.');
+      return;
+    }
+    setNewBookCoverFile(file);
+    setNewBookCoverPreview(URL.createObjectURL(file));
+  };
+
+  const handleCreateBookSubmit = async () => {
+    const isOtherCategory = newBookCategory === 'Other';
+    const numCopies = parseInt(newBookTotalCopies, 10);
+
+    if (
+      !newBookTitle.trim() ||
+      !newBookIsbn.trim() ||
+      !newBookCategory ||
+      (isOtherCategory && !newBookCustomCategory.trim()) ||
+      isNaN(numCopies) ||
+      numCopies < 1 ||
+      (!newBookCoverFile && !newBookCoverPreview)
+    ) {
+      toast.error('Please complete all required fields: Book Cover, Title, ISBN, Category, and Total Copies (minimum 1).');
+      return;
+    }
+
+    setNewBookUploading(true);
+    setNewBookProgress(0);
+    let coverUrl = newBookCoverPreview;
+
     try {
+      if (newBookCoverFile) {
+        const uploadRes = await uploadFileWithProgress(
+          'books',
+          newBookCoverFile,
+          { version: 1 },
+          (snapshot) => {
+            setNewBookProgress(snapshot.progress);
+          }
+        );
+        coverUrl = uploadRes.downloadURL;
+      }
+
+      const finalCategory = isOtherCategory ? newBookCustomCategory.trim() : newBookCategory;
+
       await addBook({
-        title: newBookTitle,
-        isbn: newBookIsbn,
-        author: newBookAuthor || 'Unknown Author',
-        category: newBookCategory,
-        totalCopies: 1,
+        title: newBookTitle.trim(),
+        isbn: newBookIsbn.trim(),
+        author: newBookAuthor.trim() || 'Unknown Author',
+        category: finalCategory,
+        customCategory: isOtherCategory ? newBookCustomCategory.trim() : '',
+        coverUrl,
+        totalCopies: numCopies,
+        availableCopies: numCopies,
       });
+
       setNewBookTitle('');
       setNewBookIsbn('');
       setNewBookAuthor('');
+      setNewBookCategory('Computer Science');
+      setNewBookCustomCategory('');
+      setNewBookTotalCopies(1);
+      setNewBookCoverFile(null);
+      setNewBookCoverPreview('');
+      setNewBookUploading(false);
+      setNewBookProgress(0);
       setAddBookOpen(false);
-      toast.success('Book added to catalog');
+      toast.success('Book catalog entry created with inventory copies!');
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to add book');
+      console.error('Book creation / Cloudinary upload failed:', err);
+      setNewBookUploading(false);
+      toast.error(err.message || 'Failed to upload cover image or save book');
     }
   };
 
@@ -621,21 +693,167 @@ export const DashboardPage = () => {
       {/* Modal 1: Add New Book */}
       <CustomDialog
         open={addBookOpen}
-        onClose={() => setAddBookOpen(false)}
+        onClose={() => !newBookUploading && setAddBookOpen(false)}
         title="Add New Book"
         subtitle="Insert a new book entry into the library catalog."
         actions={
           <>
-            <CustomButton variant="outline" onClick={() => setAddBookOpen(false)}>
+            <CustomButton
+              variant="outline"
+              onClick={() => setAddBookOpen(false)}
+              disabled={newBookUploading}
+            >
               Cancel
             </CustomButton>
-            <CustomButton variant="primary" onClick={handleCreateBookSubmit}>
-              Save Book
+            <CustomButton
+              variant="primary"
+              onClick={handleCreateBookSubmit}
+              disabled={
+                !newBookCoverPreview ||
+                !newBookTitle.trim() ||
+                !newBookIsbn.trim() ||
+                !newBookCategory ||
+                (newBookCategory === 'Other' && !newBookCustomCategory.trim()) ||
+                newBookTotalCopies < 1 ||
+                newBookUploading
+              }
+            >
+              {newBookUploading ? `Uploading (${newBookProgress}%)` : 'Save Book'}
             </CustomButton>
           </>
         }
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          {/* STEP 1 & 2: Book Cover Section ABOVE Book Title */}
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: BORROW_COLORS.textPrimary }}>
+              Book Cover <span style={{ color: BORROW_COLORS.error }}>* (Required)</span>
+            </Typography>
+
+            <Box
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragOver(false);
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  handleCoverFileSelect(e.dataTransfer.files[0]);
+                }
+              }}
+              sx={{
+                border: `2px dashed ${isDragOver ? BORROW_COLORS.primary : newBookCoverPreview ? BORROW_COLORS.success : BORROW_COLORS.border}`,
+                borderRadius: '10px',
+                p: 2,
+                textAlign: 'center',
+                backgroundColor: isDragOver ? 'rgba(37, 99, 235, 0.04)' : '#F8FAFC',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              {/* STEP 3: Preview, Remove, Replace */}
+              {newBookCoverPreview ? (
+                <>
+                  <Box
+                    sx={{
+                      width: 70,
+                      height: 95,
+                      borderRadius: '6px',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      border: `1px solid ${BORROW_COLORS.border}`,
+                    }}
+                  >
+                    <img src={newBookCoverPreview} alt="Cover Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </Box>
+
+                  <Box sx={{ flexGrow: 1, textAlign: 'left' }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+                      Book Cover Selected
+                    </Typography>
+                    {newBookCoverFile && (
+                      <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block', mb: 1 }}>
+                        {newBookCoverFile.name} ({Math.round(newBookCoverFile.size / 1024)} KB)
+                      </Typography>
+                    )}
+
+                    {newBookUploading && (
+                      <Box sx={{ my: 1 }}>
+                        <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 700, display: 'block', mb: 0.5 }}>
+                          Uploading to Cloudinary... {newBookProgress}%
+                        </Typography>
+                        <LinearProgress variant="determinate" value={newBookProgress} sx={{ height: 4, borderRadius: 2 }} />
+                      </Box>
+                    )}
+
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        size="small"
+                        startIcon={<RefreshIcon />}
+                        disabled={newBookUploading}
+                        sx={{ fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                      >
+                        Replace
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/jpeg,image/jpg,image/png,image/webp"
+                          onChange={(e) => e.target.files && handleCoverFileSelect(e.target.files[0])}
+                        />
+                      </Button>
+
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        startIcon={<DeleteIcon />}
+                        disabled={newBookUploading}
+                        onClick={() => {
+                          setNewBookCoverFile(null);
+                          setNewBookCoverPreview('');
+                        }}
+                        sx={{ fontSize: '0.75rem', py: 0.25, px: 1.5 }}
+                      >
+                        Remove
+                      </Button>
+                    </Box>
+                  </Box>
+                </>
+              ) : (
+                <Box sx={{ width: '100%', py: 1.5 }}>
+                  <CloudUploadIcon sx={{ fontSize: 32, color: BORROW_COLORS.primary, mb: 0.5 }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+                    + Upload Book Cover
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, display: 'block', mb: 1.5 }}>
+                    Drag & Drop image here or click browse (PNG, JPG, JPEG, WEBP)
+                  </Typography>
+
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    size="small"
+                    startIcon={<CloudUploadIcon />}
+                    sx={{ borderRadius: '8px', fontSize: '0.75rem', py: 0.5, px: 2 }}
+                  >
+                    Click to Browse
+                    <input
+                      type="file"
+                      hidden
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={(e) => e.target.files && handleCoverFileSelect(e.target.files[0])}
+                    />
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          </Box>
+
           <TextField
             label="Book Title"
             fullWidth
@@ -650,29 +868,52 @@ export const DashboardPage = () => {
             onChange={(e) => setNewBookAuthor(e.target.value)}
           />
           <Grid container spacing={2}>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                label="ISBN"
+                label="ISBN Number *"
                 fullWidth
                 required
                 value={newBookIsbn}
                 onChange={(e) => setNewBookIsbn(e.target.value)}
               />
             </Grid>
-            <Grid item xs={6}>
+
+            <Grid item xs={12} sm={6}>
               <TextField
-                label="Category"
-                select
+                label="Total Copies *"
+                type="number"
                 fullWidth
-                value={newBookCategory}
-                onChange={(e) => setNewBookCategory(e.target.value)}
-              >
-                <MenuItem value="Computer Science">Computer Science</MenuItem>
-                <MenuItem value="Mathematics">Mathematics</MenuItem>
-                <MenuItem value="Fiction">Fiction</MenuItem>
-                <MenuItem value="Engineering">Engineering</MenuItem>
-              </TextField>
+                required
+                inputProps={{ min: 1 }}
+                value={newBookTotalCopies}
+                onChange={(e) => setNewBookTotalCopies(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                helperText="Available copies equals Total Copies on creation"
+              />
             </Grid>
+
+            <Grid item xs={12} sm={newBookCategory === 'Other' ? 6 : 12}>
+              <Autocomplete
+                options={BOOK_CATEGORIES}
+                value={newBookCategory}
+                onChange={(_, newValue) => setNewBookCategory(newValue || 'Computer Science')}
+                renderInput={(params) => (
+                  <TextField {...params} label="Category *" required fullWidth placeholder="Type to search category..." />
+                )}
+              />
+            </Grid>
+
+            {newBookCategory === 'Other' && (
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Category Name *"
+                  fullWidth
+                  required
+                  placeholder="e.g. Artificial Intelligence"
+                  value={newBookCustomCategory}
+                  onChange={(e) => setNewBookCustomCategory(e.target.value)}
+                />
+              </Grid>
+            )}
           </Grid>
         </Box>
       </CustomDialog>

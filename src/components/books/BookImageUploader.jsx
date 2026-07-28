@@ -18,108 +18,58 @@ import CloseIcon from '@mui/icons-material/Close';
 import toast from 'react-hot-toast';
 
 import { BORROW_COLORS } from '../../theme/borrowTheme';
-import { uploadFileWithProgress } from '../../services/firebase/storageService';
 
-export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, onRemove, bookId = 'new' }) => {
+export const BookImageUploader = ({
+  currentImageUrl = '',
+  onFileSelect,
+  onRemove,
+  uploading = false,
+  uploadProgress = 0,
+}) => {
   const [previewUrl, setPreviewUrl] = useState(currentImageUrl || '');
   const [fileName, setFileName] = useState('');
+  const [fileSizeStr, setFileSizeStr] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
 
   useEffect(() => {
-    if (currentImageUrl) setPreviewUrl(currentImageUrl);
+    if (currentImageUrl) {
+      setPreviewUrl(currentImageUrl);
+    }
   }, [currentImageUrl]);
 
-  // Paste Event Listener (Ctrl + V)
-  useEffect(() => {
-    const handlePaste = (e) => {
-      const items = e.clipboardData?.items;
-      if (items) {
-        for (let i = 0; i < items.length; i++) {
-          if (items[i].type.indexOf('image') !== -1) {
-            const file = items[i].getAsFile();
-            if (file) {
-              handleFileChange(file);
-              toast.success('Image pasted from clipboard!');
-              break;
-            }
-          }
-        }
-      }
-    };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, []);
-
-  const validateImageDimensions = (file) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(img.src);
-        if (img.width < 300 || img.height < 300) {
-          toast.error(`Image resolution too low (${img.width}x${img.height}px). Minimum required is 300x300px.`);
-          resolve(false);
-        } else {
-          resolve(true);
-        }
-      };
-      img.onerror = () => resolve(false);
-    });
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const handleFileChange = async (file) => {
+  const handleFileChange = (file) => {
     if (!file) return;
 
-    // 1. Accepted File Types
+    // Supported Formats: PNG, JPG, JPEG, WEBP
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
-      toast.error('Invalid image format! Please select a JPG, JPEG, PNG, or WEBP file.');
+      toast.error('Unsupported file format! Please select a PNG, JPG, JPEG, or WEBP image.');
       return;
     }
 
-    // 2. Max File Size (10 MB)
+    // Max Size: 10MB
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size exceeds 10 MB maximum limit.');
+      toast.error('File size exceeds 10MB limit.');
       return;
     }
-
-    // 3. Min Dimensions (300 x 300 pixels)
-    const isValidDim = await validateImageDimensions(file);
-    if (!isValidDim) return;
 
     setFileName(file.name);
+    setFileSizeStr(formatFileSize(file.size));
+
     const objectUrl = URL.createObjectURL(file);
     setPreviewUrl(objectUrl);
 
-    if (onFileSelect) onFileSelect(file);
-
-    // 4. Cloudinary Storage Upload Flow
-    setUploading(true);
-    setUploadProgress(0);
-
-    try {
-      const folderPath = `books/${bookId}`;
-      const result = await uploadFileWithProgress(
-        folderPath,
-        file,
-        { version: 1 },
-        (snapshot) => {
-          setUploadProgress(snapshot.progress);
-        }
-      );
-
-      setUploading(false);
-      setPreviewUrl(result.downloadURL);
-      toast.success('Book cover image uploaded & optimized to Cloudinary!');
-      if (onUrlChange) onUrlChange(result.downloadURL);
-    } catch (err) {
-      console.error('Cloudinary Storage upload error:', err);
-      setUploading(false);
-      toast.error('Cloudinary upload failed. Using local image preview.');
-      if (onUrlChange) onUrlChange(objectUrl);
+    if (onFileSelect) {
+      onFileSelect(file);
     }
   };
 
@@ -131,23 +81,22 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
     }
   };
 
-  const handleRemoveImage = () => {
+  const handleRemove = () => {
     setPreviewUrl('');
     setFileName('');
+    setFileSizeStr('');
     if (onRemove) onRemove();
-    if (onUrlChange) onUrlChange('');
-    if (onFileSelect) onFileSelect(null);
-    toast.success('Cover image removed.');
+    toast.success('Book cover image removed.');
   };
 
   return (
-    <Box>
+    <Box sx={{ mb: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
-          Book Cover Image <span style={{ color: BORROW_COLORS.error }}>* (Required)</span>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
+          Book Cover <span style={{ color: BORROW_COLORS.error }}>* (Required)</span>
         </Typography>
         <Typography variant="caption" sx={{ color: BORROW_COLORS.textMuted }}>
-          Min 300x300px • Max 10MB
+          Supports PNG, JPG, JPEG, WEBP • Max 10MB
         </Typography>
       </Box>
 
@@ -161,29 +110,29 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
         sx={{
           border: `2px dashed ${isDragOver ? BORROW_COLORS.primary : previewUrl ? BORROW_COLORS.success : BORROW_COLORS.border}`,
           borderRadius: '12px',
-          p: 2.5,
+          p: 3,
           textAlign: 'center',
           backgroundColor: isDragOver ? 'rgba(37, 99, 235, 0.04)' : BORROW_COLORS.background,
           transition: 'all 0.2s ease',
           display: 'flex',
           flexDirection: { xs: 'column', sm: 'row' },
           alignItems: 'center',
-          gap: 2.5,
+          gap: 3,
         }}
       >
-        {/* Cover Image Preview */}
+        {/* Large Cover Image Preview */}
         <Box
           sx={{
-            width: 110,
-            height: 150,
-            borderRadius: '8px',
+            width: 130,
+            height: 175,
+            borderRadius: '10px',
             overflow: 'hidden',
             backgroundColor: '#E2E8F0',
             flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.1)',
+            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.12)',
             border: `1px solid ${BORROW_COLORS.border}`,
             position: 'relative',
           }}
@@ -200,9 +149,9 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
                 onClick={() => setZoomOpen(true)}
                 sx={{
                   position: 'absolute',
-                  top: 4,
-                  right: 4,
-                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                  top: 6,
+                  right: 6,
+                  backgroundColor: 'rgba(15, 23, 42, 0.75)',
                   color: '#FFFFFF',
                   p: 0.5,
                   '&:hover': { backgroundColor: 'rgba(15, 23, 42, 0.9)' },
@@ -212,32 +161,43 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
               </IconButton>
             </>
           ) : (
-            <PhotoCameraIcon sx={{ fontSize: 36, color: BORROW_COLORS.textMuted }} />
+            <PhotoCameraIcon sx={{ fontSize: 42, color: BORROW_COLORS.textMuted }} />
           )}
         </Box>
 
-        {/* Upload Actions & Controls */}
+        {/* Upload Actions & Metadata */}
         <Box sx={{ textAlign: { xs: 'center', sm: 'left' }, flexGrow: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary, mb: 0.5 }}>
-            {previewUrl ? 'Cover Image Uploaded' : 'Upload Cover Image (Required)'}
+          <Typography variant="h6" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary, mb: 0.5 }}>
+            {previewUrl ? 'Book Cover Selected' : '+ Upload Book Cover'}
           </Typography>
-          <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, mb: 1.5, display: 'block' }}>
-            Drag & drop file here, click browse, or paste image with <strong>Ctrl+V</strong>. Supports JPG, PNG, WEBP.
+          <Typography variant="body2" sx={{ color: BORROW_COLORS.textSecondary, mb: 1.5 }}>
+            Drag & Drop image here, or click browse to upload to Cloudinary.
           </Typography>
 
+          {/* Filename & File Size Badge */}
           {fileName && (
-            <Chip
-              icon={<CheckCircleIcon />}
-              label={`Selected: ${fileName}`}
-              color="success"
-              size="small"
-              sx={{ mb: 1.5, fontWeight: 600 }}
-            />
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1.5, justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+              <Chip
+                icon={<CheckCircleIcon />}
+                label={fileName}
+                color="success"
+                size="small"
+                sx={{ fontWeight: 600 }}
+              />
+              {fileSizeStr && (
+                <Chip
+                  label={fileSizeStr}
+                  variant="outlined"
+                  size="small"
+                  sx={{ fontWeight: 600 }}
+                />
+              )}
+            </Box>
           )}
 
-          {/* Upload Progress Bar */}
+          {/* Real-time Upload Progress Indicator */}
           {uploading && (
-            <Box sx={{ mb: 1.5 }}>
+            <Box sx={{ mb: 2 }}>
               <Typography variant="caption" sx={{ color: BORROW_COLORS.primary, fontWeight: 700, mb: 0.5, display: 'block' }}>
                 Uploading to Cloudinary... {uploadProgress}%
               </Typography>
@@ -245,22 +205,22 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+          {/* Action Buttons: Browse / Replace & Remove */}
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
             <Button
-              variant="outlined"
+              variant="contained"
               component="label"
               startIcon={previewUrl ? <RefreshIcon /> : <CloudUploadIcon />}
               disabled={uploading}
               sx={{
                 borderRadius: '8px',
-                borderColor: BORROW_COLORS.primary,
-                color: BORROW_COLORS.primary,
+                px: 2.5,
+                py: 0.75,
+                fontWeight: 700,
                 fontSize: '0.8125rem',
-                py: 0.5,
-                px: 2,
               }}
             >
-              {uploading ? 'Uploading...' : previewUrl ? 'Replace Cover' : 'Browse File'}
+              {uploading ? `Uploading (${uploadProgress}%)` : previewUrl ? 'Replace Cover' : 'Click to Browse'}
               <input
                 type="file"
                 hidden
@@ -274,8 +234,9 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
                 variant="outlined"
                 color="error"
                 startIcon={<DeleteIcon />}
-                onClick={handleRemoveImage}
-                sx={{ borderRadius: '8px', fontSize: '0.8125rem', py: 0.5, px: 1.5 }}
+                onClick={handleRemove}
+                disabled={uploading}
+                sx={{ borderRadius: '8px', px: 2, fontSize: '0.8125rem', fontWeight: 600 }}
               >
                 Remove
               </Button>
@@ -284,7 +245,7 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
         </Box>
       </Box>
 
-      {/* Zoom Modal Lightbox */}
+      {/* Fullscreen Zoom Lightbox Dialog */}
       <Dialog open={zoomOpen} onClose={() => setZoomOpen(false)} maxWidth="sm">
         <Box sx={{ position: 'relative', p: 1, backgroundColor: '#0F172A' }}>
           <IconButton
@@ -293,7 +254,7 @@ export const BookImageUploader = ({ currentImageUrl, onFileSelect, onUrlChange, 
           >
             <CloseIcon />
           </IconButton>
-          <img src={previewUrl} alt="Cover Zoom Preview" style={{ width: '100%', height: 'auto', borderRadius: 8 }} />
+          <img src={previewUrl} alt="Cover Large Zoom" style={{ width: '100%', height: 'auto', borderRadius: 8 }} />
         </Box>
       </Dialog>
     </Box>

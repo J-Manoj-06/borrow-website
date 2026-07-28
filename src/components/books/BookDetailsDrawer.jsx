@@ -9,6 +9,7 @@ import Grid from '@mui/material/Grid';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Tooltip from '@mui/material/Tooltip';
+import Dialog from '@mui/material/Dialog';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import ArchiveIcon from '@mui/icons-material/Archive';
@@ -17,6 +18,9 @@ import PrintIcon from '@mui/icons-material/Print';
 import HistoryIcon from '@mui/icons-material/History';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import TuneIcon from '@mui/icons-material/Tune';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { StatusChip } from '../common/CustomTable';
@@ -30,10 +34,15 @@ export const BookDetailsDrawer = ({ open, onClose, book, copies = [], onEdit, on
   const [activeTab, setActiveTab] = useState(0);
   const [selectedCopyForEdit, setSelectedCopyForEdit] = useState(null);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const { openQrPreview, openPrintLabelsModal, openCopyHistory, downloadSinglePng } = useQRCode();
 
   if (!book) return null;
+
+  const galleryImages = book.imageGallery && book.imageGallery.length > 0
+    ? book.imageGallery
+    : [book.coverUrl || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=500'];
 
   const handleOpenCopyModal = (copy) => {
     setSelectedCopyForEdit(copy);
@@ -81,6 +90,7 @@ export const BookDetailsDrawer = ({ open, onClose, book, copies = [], onEdit, on
           {/* Main Book Card Banner */}
           <Box sx={{ display: 'flex', gap: 2.5, mb: 3 }}>
             <Box
+              onClick={() => setLightboxIndex(0)}
               sx={{
                 width: 120,
                 height: 165,
@@ -90,6 +100,8 @@ export const BookDetailsDrawer = ({ open, onClose, book, copies = [], onEdit, on
                 boxShadow: '0px 6px 20px rgba(15, 23, 42, 0.15)',
                 border: `1px solid ${BORROW_COLORS.border}`,
                 backgroundColor: '#F1F5F9',
+                cursor: 'pointer',
+                position: 'relative',
               }}
             >
               <img
@@ -97,6 +109,12 @@ export const BookDetailsDrawer = ({ open, onClose, book, copies = [], onEdit, on
                 alt={book.title}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
+              <IconButton
+                size="small"
+                sx={{ position: 'absolute', bottom: 4, right: 4, backgroundColor: 'rgba(15, 23, 42, 0.7)', color: '#FFFFFF', p: 0.5 }}
+              >
+                <ZoomInIcon sx={{ fontSize: 14 }} />
+              </IconButton>
             </Box>
 
             <Box sx={{ minWidth: 0, flexGrow: 1 }}>
@@ -173,13 +191,14 @@ export const BookDetailsDrawer = ({ open, onClose, book, copies = [], onEdit, on
 
           <Divider sx={{ mb: 2 }} />
 
-          {/* Tabs: Info vs Physical Copies */}
+          {/* Tabs: Info vs Physical Copies vs Gallery */}
           <Tabs
             value={activeTab}
             onChange={(_, val) => setActiveTab(val)}
             sx={{ mb: 2, borderBottom: `1px solid ${BORROW_COLORS.border}` }}
           >
             <Tab label="Metadata & Location" sx={{ fontWeight: 700 }} />
+            <Tab label={`Gallery (${galleryImages.length})`} sx={{ fontWeight: 700 }} />
             <Tab label={`Physical Copies (${copies.length || book.totalCopies})`} sx={{ fontWeight: 700 }} />
           </Tabs>
 
@@ -221,8 +240,60 @@ export const BookDetailsDrawer = ({ open, onClose, book, copies = [], onEdit, on
             </Box>
           )}
 
-          {/* Tab 1: Physical Copies Breakdown */}
+          {/* Tab 1: Image Gallery Grid */}
           {activeTab === 1 && (
+            <Box>
+              <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, mb: 1.5, display: 'block' }}>
+                All catalog images on record for this book title (Click image to open fullscreen preview):
+              </Typography>
+
+              <Grid container spacing={1.5}>
+                {galleryImages.map((url, idx) => (
+                  <Grid item xs={6} sm={4} key={idx}>
+                    <Box
+                      onClick={() => setLightboxIndex(idx)}
+                      sx={{
+                        height: 140,
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        backgroundColor: '#E2E8F0',
+                        border: `1px solid ${BORROW_COLORS.border}`,
+                        cursor: 'pointer',
+                        position: 'relative',
+                        boxShadow: BORROW_COLORS.cardShadow,
+                        '&:hover': { borderColor: BORROW_COLORS.primary },
+                      }}
+                    >
+                      <img
+                        src={url}
+                        alt={`Gallery ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      {idx === 0 && (
+                        <Chip
+                          label="Primary"
+                          size="small"
+                          sx={{
+                            position: 'absolute',
+                            top: 4,
+                            left: 4,
+                            height: 18,
+                            fontSize: '0.625rem',
+                            fontWeight: 700,
+                            backgroundColor: BORROW_COLORS.primary,
+                            color: '#FFFFFF',
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+          )}
+
+          {/* Tab 2: Physical Copies Breakdown */}
+          {activeTab === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary, mb: 1, display: 'block' }}>
                 Individually tracked physical copy records and status lifecycle:
@@ -322,6 +393,54 @@ export const BookDetailsDrawer = ({ open, onClose, book, copies = [], onEdit, on
         copy={selectedCopyForEdit}
         bookTitle={book.title}
       />
+
+      {/* Fullscreen Lightbox Modal */}
+      {lightboxIndex !== null && (
+        <Dialog fullScreen open={lightboxIndex !== null} onClose={() => setLightboxIndex(null)}>
+          <Box
+            sx={{
+              position: 'relative',
+              width: '100%',
+              height: '100%',
+              backgroundColor: '#0F172A',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <IconButton
+              onClick={() => setLightboxIndex(null)}
+              sx={{ position: 'absolute', top: 16, right: 16, color: '#FFFFFF', zIndex: 10 }}
+            >
+              <CloseIcon />
+            </IconButton>
+
+            {galleryImages.length > 1 && (
+              <IconButton
+                onClick={() => setLightboxIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length)}
+                sx={{ position: 'absolute', left: 24, color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
+              >
+                <ArrowBackIosNewIcon />
+              </IconButton>
+            )}
+
+            <img
+              src={galleryImages[lightboxIndex]}
+              alt="Gallery Fullscreen"
+              style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8 }}
+            />
+
+            {galleryImages.length > 1 && (
+              <IconButton
+                onClick={() => setLightboxIndex((prev) => (prev + 1) % galleryImages.length)}
+                sx={{ position: 'absolute', right: 24, color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
+              >
+                <ArrowForwardIosIcon />
+              </IconButton>
+            )}
+          </Box>
+        </Dialog>
+      )}
     </>
   );
 };

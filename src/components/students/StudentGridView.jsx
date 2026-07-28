@@ -4,7 +4,6 @@ import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Grid from '@mui/material/Grid';
-import Avatar from '@mui/material/Avatar';
 import Checkbox from '@mui/material/Checkbox';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
@@ -15,7 +14,6 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import NotificationsOutlinedIcon from '@mui/icons-material/NotificationsOutlined';
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
@@ -24,6 +22,7 @@ import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import StatusBadge from '../common/StatusBadge';
 import CustomButton from '../common/CustomButton';
+import SmartImage from '../common/SmartImage';
 
 export const StudentGridView = ({
   students = [],
@@ -122,13 +121,16 @@ export const StudentGridView = ({
                       onClick={() => onSelectProfile(st)}
                       sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', cursor: 'pointer', mb: 1.5 }}
                     >
-                      <Avatar
-                        src={st.avatarUrl || ''}
+                      <SmartImage
+                        src={st.avatarUrl}
                         alt={st.fullName || st.name}
-                        sx={{ width: 56, height: 56, bgcolor: BORROW_COLORS.primary, fontWeight: 600, fontSize: '1.25rem', mb: 1 }}
-                      >
-                        {(st.fullName || st.name || 'S')[0]}
-                      </Avatar>
+                        preset="avatar"
+                        fallbackType="studentAvatar"
+                        width={56}
+                        height={56}
+                        borderRadius="50%"
+                        sx={{ mb: 1 }}
+                      />
 
                       <Typography variant="h6" noWrap sx={{ fontWeight: 600, fontSize: '0.9375rem', color: BORROW_COLORS.textPrimary, width: '100%' }}>
                         {st.fullName || st.name}

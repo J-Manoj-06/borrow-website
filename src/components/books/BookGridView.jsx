@@ -3,14 +3,12 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import CardMedia from '@mui/material/CardMedia';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import Checkbox from '@mui/material/Checkbox';
-import Tooltip from '@mui/material/Tooltip';
 
 // Icons
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -20,11 +18,11 @@ import FileCopyOutlinedIcon from '@mui/icons-material/FileCopyOutlined';
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined';
 import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
 import DeleteForeverOutlinedIcon from '@mui/icons-material/DeleteForeverOutlined';
-import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import StatusBadge from '../common/StatusBadge';
 import CustomButton from '../common/CustomButton';
+import SmartImage from '../common/SmartImage';
 
 export const BookGridView = ({
   books = [],
@@ -121,19 +119,18 @@ export const BookGridView = ({
                     position: 'relative',
                     cursor: 'pointer',
                     overflow: 'hidden',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
                   }}
                 >
-                  <CardMedia
-                    component="img"
-                    image={book.coverUrl || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=500'}
+                  <SmartImage
+                    src={book.coverUrl}
                     alt={book.title}
-                    sx={{ height: '100%', width: '100%', objectFit: 'cover' }}
+                    preset="preview"
+                    fallbackType="bookCover"
+                    height="100%"
+                    width="100%"
                   />
 
-                  <Box sx={{ position: 'absolute', bottom: 8, right: 8 }}>
+                  <Box sx={{ position: 'absolute', bottom: 8, right: 8, zIndex: 2 }}>
                     <StatusBadge status={isAvailable ? 'Available' : 'Borrowed'} size="small" />
                   </Box>
                 </Box>

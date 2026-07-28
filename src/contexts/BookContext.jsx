@@ -108,13 +108,14 @@ export const BookProvider = ({ children }) => {
         if (!filterOptions.showArchived && b?.isArchived) return false;
         if (filterOptions.showArchived && !b?.isArchived) return false;
 
-        // Search Query (Title, ISBN, Author, Category, Publisher, Keywords)
+        // Search Query (Title, ISBN, Author, Category, CustomCategory, Publisher, Keywords)
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const matchesTitle = b?.title?.toLowerCase().includes(q);
           const matchesIsbn = b?.isbn?.toLowerCase().includes(q);
           const matchesAuthor = b?.author?.toLowerCase().includes(q);
           const matchesCategory = b?.category?.toLowerCase().includes(q);
+          const matchesCustomCategory = b?.customCategory?.toLowerCase().includes(q);
           const matchesPublisher = b?.publisher?.toLowerCase().includes(q);
           const matchesKeywords = b?.keywords?.some((k) => k?.toLowerCase().includes(q));
 
@@ -123,6 +124,7 @@ export const BookProvider = ({ children }) => {
             !matchesIsbn &&
             !matchesAuthor &&
             !matchesCategory &&
+            !matchesCustomCategory &&
             !matchesPublisher &&
             !matchesKeywords
           ) {
@@ -131,7 +133,7 @@ export const BookProvider = ({ children }) => {
         }
 
         // Category Filter
-        if (filterOptions.category !== 'All' && b?.category !== filterOptions.category) {
+        if (filterOptions.category !== 'All' && b?.category !== filterOptions.category && b?.customCategory !== filterOptions.category) {
           return false;
         }
 
@@ -152,6 +154,7 @@ export const BookProvider = ({ children }) => {
 
         // Availability Filter
         if (filterOptions.availability === 'In Stock' && (b?.availableCopies ?? 0) <= 0) return false;
+        if (filterOptions.availability === 'Low Stock' && ((b?.availableCopies ?? 0) <= 0 || (b?.availableCopies ?? 0) > 2)) return false;
         if (filterOptions.availability === 'Out of Stock' && (b?.availableCopies ?? 0) > 0) return false;
 
         return true;

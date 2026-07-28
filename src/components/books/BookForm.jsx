@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -8,6 +8,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
+import Autocomplete from '@mui/material/Autocomplete';
 import IconButton from '@mui/material/IconButton';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
@@ -20,15 +21,20 @@ import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { BOOK_CATEGORIES, BOOK_DEPARTMENTS } from '../../models/bookModel';
 import BookImageUploader from './BookImageUploader';
 import CustomButton from '../common/CustomButton';
+import { uploadFileWithProgress } from '../../services/firebase/storageService';
 
 export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditing = false }) => {
   const [selectedCoverFile, setSelectedCoverFile] = useState(null);
   const [coverImageUrl, setCoverImageUrl] = useState(initialData?.coverUrl || '');
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
     handleSubmit,
+    watch,
+    control,
     reset,
     formState: { errors },
   } = useForm({
@@ -40,7 +46,8 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
       isbn: '',
       edition: '1st Edition',
       language: 'English',
-      category: 'Software Engineering',
+      category: 'Computer Science',
+      customCategory: '',
       department: 'Computer Science & Engineering',
       shelfNumber: 'CS-01',
       rackNumber: 'R-01',
@@ -52,6 +59,12 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
       recommendedReading: true,
     },
   });
+
+  // Watch required fields
+  const watchTitle = watch('title');
+  const watchIsbn = watch('isbn');
+  const watchCategory = watch('category');
+  const watchCustomCategory = watch('customCategory');
 
   useEffect(() => {
     if (initialData) {
@@ -98,18 +111,56 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
       setCoverImageUrl('');
     }
     setSelectedCoverFile(null);
+    setUploading(false);
+    setUploadProgress(0);
   }, [initialData, reset, open]);
 
-  // Check if a valid image cover is uploaded or present
+  // Mandatory Validation: Book Title, ISBN, Category, Custom Category (if Other), Total Copies, and Cover Image
   const hasCoverImage = Boolean(coverImageUrl || selectedCoverFile);
+  const isOtherCat = watchCategory === 'Other';
+  const isFormComplete = Boolean(
+    watchTitle && watchTitle.trim() &&
+    watchIsbn && watchIsbn.trim() &&
+    watchCategory &&
+    (!isOtherCat || (watchCustomCategory && watchCustomCategory.trim())) &&
+    hasCoverImage
+  );
 
   const handleFormSubmit = async (formData) => {
     if (!hasCoverImage) {
-      toast.error('Book cover image is required! Please upload a cover image before saving.');
+      toast.error('Book Cover is required! Please select a cover image before saving.');
       return;
     }
 
     setSubmitting(true);
+    let finalCoverUrl = coverImageUrl;
+
+    if (selectedCoverFile) {
+      setUploading(true);
+      setUploadProgress(0);
+      try {
+        const uploadRes = await uploadFileWithProgress(
+          'books',
+          selectedCoverFile,
+          { version: 1 },
+          (snapshot) => {
+            setUploadProgress(snapshot.progress);
+          }
+        );
+        finalCoverUrl = uploadRes.downloadURL;
+        setCoverImageUrl(finalCoverUrl);
+        toast.success('Book cover uploaded successfully to Cloudinary!');
+      } catch (uploadErr) {
+        console.error('Cloudinary image upload failed:', uploadErr);
+        setUploading(false);
+        setSubmitting(false);
+        toast.error('Cloudinary upload failed. Please retry.');
+        return;
+      } finally {
+        setUploading(false);
+      }
+    }
+
     try {
       const keywordsArray = formData.keywords
         ? formData.keywords.split(',').map((k) => k.trim()).filter(Boolean)
@@ -118,19 +169,26 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
         ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean)
         : [];
 
+      const numCopies = parseInt(formData.totalCopies, 10) || 1;
+      const finalCat = formData.category === 'Other' ? (formData.customCategory || 'Other') : formData.category;
+
       const payload = {
         ...formData,
-        totalCopies: parseInt(formData.totalCopies, 10),
+        category: finalCat,
+        customCategory: formData.category === 'Other' ? formData.customCategory : '',
+        totalCopies: numCopies,
+        availableCopies: numCopies,
         publicationYear: parseInt(formData.publicationYear, 10),
         keywords: keywordsArray,
         tags: tagsArray,
-        coverUrl: coverImageUrl || initialData?.coverUrl || '',
+        coverUrl: finalCoverUrl,
       };
 
-      await onSubmit(payload, selectedCoverFile);
+      await onSubmit(payload);
       onClose();
-    } catch {
-      // Error handled by parent toast
+    } catch (err) {
+      console.error('Firestore book creation error:', err);
+      toast.error('Failed to create book document in Firestore.');
     } finally {
       setSubmitting(false);
     }
@@ -179,236 +237,220 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
               {isEditing ? 'Edit Book Record' : 'Add New Book to Inventory'}
             </Typography>
             <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-              Every book record requires a mandatory cover image before saving to catalog.
+              Synchronized automatically with Firebase Firestore for Borrow Mobile App.
             </Typography>
           </Box>
         </Box>
 
-        <IconButton onClick={onClose} sx={{ color: BORROW_COLORS.textSecondary }}>
+        <IconButton onClick={onClose} sx={{ color: BORROW_COLORS.textSecondary }} disabled={submitting || uploading}>
           <CloseIcon />
         </IconButton>
       </DialogTitle>
 
       {/* Main Form Content */}
-      <DialogContent sx={{ p: { xs: 2, sm: 4, md: 6 } }}>
+      <DialogContent sx={{ p: { xs: 2, sm: 4, md: 5 } }}>
         <Box component="form" onSubmit={handleSubmit(handleFormSubmit)} noValidate>
-          <Grid container spacing={3.5}>
-            {/* Left Column: Mandatory Image Upload & Copies */}
-            <Grid item xs={12} lg={4}>
-              <Box
-                sx={{
-                  backgroundColor: BORROW_COLORS.surface,
-                  p: 3,
-                  borderRadius: '12px',
-                  border: `1px solid ${BORROW_COLORS.border}`,
-                  boxShadow: BORROW_COLORS.cardShadow,
-                }}
-              >
-                {/* Mandatory Image Upload Section */}
-                <BookImageUploader
-                  currentImageUrl={coverImageUrl}
-                  onFileSelect={(file) => setSelectedCoverFile(file)}
-                  onUrlChange={(url) => setCoverImageUrl(url)}
-                  onRemove={() => {
-                    setSelectedCoverFile(null);
-                    setCoverImageUrl('');
-                  }}
+          {/* STEP 2: Dedicated Book Cover Section ABOVE Book Title */}
+          <Box
+            sx={{
+              backgroundColor: BORROW_COLORS.surface,
+              p: { xs: 2.5, sm: 3.5 },
+              borderRadius: '12px',
+              border: `1px solid ${BORROW_COLORS.border}`,
+              boxShadow: BORROW_COLORS.cardShadow,
+              mb: 3.5,
+            }}
+          >
+            <BookImageUploader
+              currentImageUrl={coverImageUrl}
+              onFileSelect={(file) => setSelectedCoverFile(file)}
+              onRemove={() => {
+                setSelectedCoverFile(null);
+                setCoverImageUrl('');
+              }}
+              uploading={uploading}
+              uploadProgress={uploadProgress}
+            />
+
+            {!hasCoverImage && (
+              <Alert severity="warning" sx={{ borderRadius: '8px', fontSize: '0.8125rem' }}>
+                <strong>Book Cover Required:</strong> Upload a book cover image before saving to catalog.
+              </Alert>
+            )}
+          </Box>
+
+          {/* Book Catalog Details Grid */}
+          <Box
+            sx={{
+              backgroundColor: BORROW_COLORS.surface,
+              p: { xs: 3, sm: 4 },
+              borderRadius: '12px',
+              border: `1px solid ${BORROW_COLORS.border}`,
+              boxShadow: BORROW_COLORS.cardShadow,
+            }}
+          >
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: BORROW_COLORS.textPrimary }}>
+              Book Metadata & Catalog Details
+            </Typography>
+
+            <Grid container spacing={2.5}>
+              {/* Book Title & ISBN */}
+              <Grid item xs={12} sm={8}>
+                <TextField
+                  fullWidth
+                  label="Book Title *"
+                  error={Boolean(errors.title)}
+                  helperText={errors.title?.message}
+                  {...register('title', { required: 'Book title is required' })}
                 />
+              </Grid>
 
-                {/* Missing Image Warning Alert */}
-                {!hasCoverImage && (
-                  <Alert severity="warning" sx={{ mt: 2, borderRadius: '8px', fontSize: '0.8125rem' }}>
-                    <strong>Cover Image Required:</strong> Upload or paste a cover image to enable book saving.
-                  </Alert>
-                )}
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="ISBN Number *"
+                  placeholder="9780132350884"
+                  error={Boolean(errors.isbn)}
+                  helperText={errors.isbn?.message}
+                  {...register('isbn', { required: 'ISBN is required' })}
+                />
+              </Grid>
 
-                <Box sx={{ mt: 3 }}>
-                  <Typography variant="subtitle2" sx={{ mb: 0.8, fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
-                    Total Physical Copies *
-                  </Typography>
+              <Grid item xs={12} sm={6}>
+                <TextField fullWidth label="Subtitle (Optional)" {...register('subtitle')} />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Author Name(s) *"
+                  error={Boolean(errors.author)}
+                  helperText={errors.author?.message}
+                  {...register('author', { required: 'Author is required' })}
+                />
+              </Grid>
+
+              {/* Publisher & Year */}
+              <Grid item xs={12} sm={4}>
+                <TextField fullWidth label="Publisher" {...register('publisher')} />
+              </Grid>
+
+              <Grid item xs={6} sm={4}>
+                <TextField fullWidth label="Edition" {...register('edition')} />
+              </Grid>
+
+              <Grid item xs={6} sm={4}>
+                <TextField fullWidth label="Publication Year" type="number" {...register('publicationYear')} />
+              </Grid>
+
+              {/* Category & Custom Category */}
+              <Grid item xs={12} sm={watchCategory === 'Other' ? 6 : 6}>
+                <Controller
+                  name="category"
+                  control={control}
+                  rules={{ required: 'Category is required' }}
+                  render={({ field: { onChange, value } }) => (
+                    <Autocomplete
+                      options={BOOK_CATEGORIES}
+                      value={value || 'Computer Science'}
+                      onChange={(_, newValue) => onChange(newValue || 'Computer Science')}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Category *"
+                          error={Boolean(errors.category)}
+                          helperText={errors.category?.message}
+                          fullWidth
+                          placeholder="Search or select category..."
+                        />
+                      )}
+                    />
+                  )}
+                />
+              </Grid>
+
+              {watchCategory === 'Other' && (
+                <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    type="number"
-                    error={Boolean(errors.totalCopies)}
-                    helperText={errors.totalCopies?.message || 'Creates individual physical copy records'}
-                    {...register('totalCopies', {
-                      required: 'Total copies is required',
-                      min: { value: 1, message: 'Minimum 1 copy' },
-                    })}
+                    label="Category Name *"
+                    placeholder="e.g. Artificial Intelligence"
+                    error={Boolean(errors.customCategory)}
+                    helperText={errors.customCategory?.message || 'Specify custom category name'}
+                    {...register('customCategory', { required: 'Category Name is required when Other is selected' })}
                   />
-                </Box>
-
-                <Box sx={{ mt: 2.5 }}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        defaultChecked={initialData?.recommendedReading ?? true}
-                        color="primary"
-                        {...register('recommendedReading')}
-                      />
-                    }
-                    label="Flag as Recommended Reading in Mobile App"
-                  />
-                </Box>
-              </Box>
-            </Grid>
-
-            {/* Right Column: Book Catalog Metadata Fields */}
-            <Grid item xs={12} lg={8}>
-              <Box
-                sx={{
-                  backgroundColor: BORROW_COLORS.surface,
-                  p: { xs: 3, sm: 4 },
-                  borderRadius: '12px',
-                  border: `1px solid ${BORROW_COLORS.border}`,
-                  boxShadow: BORROW_COLORS.cardShadow,
-                }}
-              >
-                <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, color: BORROW_COLORS.textPrimary }}>
-                  Book Metadata & Catalog Details
-                </Typography>
-
-                <Grid container spacing={2.5}>
-                  {/* Title & Subtitle */}
-                  <Grid item xs={12} sm={8}>
-                    <TextField
-                      fullWidth
-                      label="Book Title *"
-                      error={Boolean(errors.title)}
-                      helperText={errors.title?.message}
-                      {...register('title', { required: 'Book title is required' })}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={4}>
-                    <TextField
-                      fullWidth
-                      label="ISBN Number *"
-                      placeholder="9780132350884"
-                      error={Boolean(errors.isbn)}
-                      helperText={errors.isbn?.message}
-                      {...register('isbn', { required: 'ISBN is required' })}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField fullWidth label="Subtitle (Optional)" {...register('subtitle')} />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Author Name(s) *"
-                      error={Boolean(errors.author)}
-                      helperText={errors.author?.message}
-                      {...register('author', { required: 'Author is required' })}
-                    />
-                  </Grid>
-
-                  {/* Publisher & Year */}
-                  <Grid item xs={12} sm={4}>
-                    <TextField fullWidth label="Publisher" {...register('publisher')} />
-                  </Grid>
-
-                  <Grid item xs={6} sm={4}>
-                    <TextField fullWidth label="Edition" {...register('edition')} />
-                  </Grid>
-
-                  <Grid item xs={6} sm={4}>
-                    <TextField fullWidth label="Publication Year" type="number" {...register('publicationYear')} />
-                  </Grid>
-
-                  {/* Category & Department */}
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      select
-                      fullWidth
-                      label="Category *"
-                      defaultValue="Software Engineering"
-                      error={Boolean(errors.category)}
-                      {...register('category', { required: 'Category is required' })}
-                    >
-                      {BOOK_CATEGORIES.map((cat) => (
-                        <MenuItem key={cat} value={cat}>
-                          {cat}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField select fullWidth label="Target Department" defaultValue="Computer Science & Engineering" {...register('department')}>
-                      {BOOK_DEPARTMENTS.map((dept) => (
-                        <MenuItem key={dept} value={dept}>
-                          {dept}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-
-                  {/* Shelf & Rack */}
-                  <Grid item xs={6} sm={3}>
-                    <TextField fullWidth label="Shelf Number" placeholder="CS-04" {...register('shelfNumber')} />
-                  </Grid>
-
-                  <Grid item xs={6} sm={3}>
-                    <TextField fullWidth label="Rack Number" placeholder="R-02" {...register('rackNumber')} />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField fullWidth label="Language" defaultValue="English" {...register('language')} />
-                  </Grid>
-
-                  {/* Description */}
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
-                      label="Book Description & Synopsis"
-                      placeholder="Enter a brief overview of the book content..."
-                      {...register('description')}
-                    />
-                  </Grid>
-
-                  {/* Keywords & Tags */}
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Search Keywords (Comma Separated)"
-                      placeholder="agile, refactoring, java"
-                      {...register('keywords')}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Display Tags (Comma Separated)"
-                      placeholder="Bestseller, Core CS"
-                      {...register('tags')}
-                    />
-                  </Grid>
                 </Grid>
+              )}
 
-                {/* Form Action Buttons */}
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 4 }}>
-                  <CustomButton variant="outlined" onClick={onClose} disabled={submitting}>
-                    Cancel
-                  </CustomButton>
-                  <CustomButton
-                    type="submit"
-                    variant="contained"
-                    loading={submitting}
-                    disabled={!hasCoverImage || submitting}
-                    sx={{ px: 4 }}
-                  >
-                    {isEditing ? 'Update Book Record' : 'Save Book to Catalog'}
-                  </CustomButton>
-                </Box>
-              </Box>
+              <Grid item xs={12} sm={6}>
+                <TextField select fullWidth label="Target Department" defaultValue="Computer Science & Engineering" {...register('department')}>
+                  {BOOK_DEPARTMENTS.map((dept) => (
+                    <MenuItem key={dept} value={dept}>
+                      {dept}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+
+              {/* Shelf & Rack */}
+              <Grid item xs={6} sm={3}>
+                <TextField fullWidth label="Shelf Number" placeholder="CS-04" {...register('shelfNumber')} />
+              </Grid>
+
+              <Grid item xs={6} sm={3}>
+                <TextField fullWidth label="Rack Number" placeholder="R-02" {...register('rackNumber')} />
+              </Grid>
+
+              <Grid item xs={6} sm={3}>
+                <TextField fullWidth label="Total Copies *" type="number" {...register('totalCopies', { required: true, min: 1 })} />
+              </Grid>
+
+              <Grid item xs={6} sm={3}>
+                <TextField fullWidth label="Language" defaultValue="English" {...register('language')} />
+              </Grid>
+
+              {/* Description */}
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="Book Description & Synopsis"
+                  placeholder="Enter a brief overview of the book content..."
+                  {...register('description')}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      defaultChecked={initialData?.recommendedReading ?? true}
+                      color="primary"
+                      {...register('recommendedReading')}
+                    />
+                  }
+                  label="Flag as Recommended Reading in Mobile App"
+                />
+              </Grid>
             </Grid>
-          </Grid>
+
+            {/* STEP 5: Save Book button remains DISABLED until Title, ISBN, Category, and Cover are filled */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 4 }}>
+              <CustomButton variant="outlined" onClick={onClose} disabled={submitting || uploading}>
+                Cancel
+              </CustomButton>
+              <CustomButton
+                type="submit"
+                variant="contained"
+                loading={submitting || uploading}
+                disabled={!isFormComplete || submitting || uploading}
+                sx={{ px: 4 }}
+              >
+                {uploading ? `Uploading Cover (${uploadProgress}%)` : isEditing ? 'Update Book Record' : 'Save Book to Catalog'}
+              </CustomButton>
+            </Box>
+          </Box>
         </Box>
       </DialogContent>
     </Dialog>

@@ -1,0 +1,1 @@
+import{i as h,j as m}from"./index-BBREfJhh.js";const s=h(m.jsx("path",{d:"M21 8H3V4h18zm0 2H3v4h18zm0 6H3v4h18z"}),"TableRows"),v=h(m.jsx("path",{fillRule:"evenodd",d:"M3 3v8h8V3zm6 6H5V5h4zm-6 4v8h8v-8zm6 6H5v-4h4zm4-16v8h8V3zm6 6h-4V5h4zm-6 4v8h8v-8zm6 6h-4v-4h4z"}),"GridView");export{v as G,s as T};

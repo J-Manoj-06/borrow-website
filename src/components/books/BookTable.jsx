@@ -21,6 +21,7 @@ import CustomTable, { StatusChip } from '../common/CustomTable';
 import CustomDialog from '../common/CustomDialog';
 import CustomButton from '../common/CustomButton';
 import StatusBadge from '../common/StatusBadge';
+import SmartImage from '../common/SmartImage';
 import { useBooks } from '../../hooks/useBooks';
 
 export const BookTable = ({
@@ -128,10 +129,13 @@ export const BookTable = ({
             border: `1px solid ${BORROW_COLORS.border}`,
           }}
         >
-          <img
-            src={val || 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=500'}
+          <SmartImage
+            src={val}
             alt={row.title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            preset="thumbnail"
+            fallbackType="bookCover"
+            width={36}
+            height={48}
           />
         </Box>
       ),

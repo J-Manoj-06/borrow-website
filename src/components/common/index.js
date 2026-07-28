@@ -11,6 +11,7 @@ export { default as PageHeader } from './PageHeader';
 export { default as PaginationComponent } from './PaginationComponent';
 export { default as SectionHeader } from './SectionHeader';
 export { default as SkeletonLoader, TableSkeleton, CardGridSkeleton, PageHeaderSkeleton, StatsSkeleton } from './SkeletonLoader';
+export { default as SmartImage } from './SmartImage';
 export { default as StatusBadge } from './StatusBadge';
 export { default as UniversalFilterBar } from './UniversalFilterBar';
 export { default as UniversalSearchBar } from './UniversalSearchBar';
