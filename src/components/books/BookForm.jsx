@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 import Grid from '@mui/material/Grid';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -12,8 +11,11 @@ import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
+import Alert from '@mui/material/Alert';
 import CloseIcon from '@mui/icons-material/Close';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
+import toast from 'react-hot-toast';
+
 import { BORROW_COLORS } from '../../theme/borrowTheme';
 import { BOOK_CATEGORIES, BOOK_DEPARTMENTS } from '../../models/bookModel';
 import BookImageUploader from './BookImageUploader';
@@ -21,6 +23,7 @@ import CustomButton from '../common/CustomButton';
 
 export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditing = false }) => {
   const [selectedCoverFile, setSelectedCoverFile] = useState(null);
+  const [coverImageUrl, setCoverImageUrl] = useState(initialData?.coverUrl || '');
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -71,6 +74,7 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
         tags: initialData.tags ? initialData.tags.join(', ') : '',
         recommendedReading: initialData.recommendedReading ?? true,
       });
+      setCoverImageUrl(initialData.coverUrl || '');
     } else {
       reset({
         title: '',
@@ -91,11 +95,20 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
         tags: '',
         recommendedReading: true,
       });
+      setCoverImageUrl('');
     }
     setSelectedCoverFile(null);
   }, [initialData, reset, open]);
 
+  // Check if a valid image cover is uploaded or present
+  const hasCoverImage = Boolean(coverImageUrl || selectedCoverFile);
+
   const handleFormSubmit = async (formData) => {
+    if (!hasCoverImage) {
+      toast.error('Book cover image is required! Please upload a cover image before saving.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const keywordsArray = formData.keywords
@@ -111,7 +124,7 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
         publicationYear: parseInt(formData.publicationYear, 10),
         keywords: keywordsArray,
         tags: tagsArray,
-        coverUrl: initialData?.coverUrl || '',
+        coverUrl: coverImageUrl || initialData?.coverUrl || '',
       };
 
       await onSubmit(payload, selectedCoverFile);
@@ -152,7 +165,7 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
               width: 40,
               height: 40,
               borderRadius: '10px',
-              background: BORROW_COLORS.primaryGradient,
+              backgroundColor: BORROW_COLORS.primary,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -162,11 +175,11 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
             <AutoStoriesIcon fontSize="small" />
           </Box>
           <Box>
-            <Typography variant="h4" sx={{ fontWeight: 800, color: BORROW_COLORS.textPrimary }}>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
               {isEditing ? 'Edit Book Record' : 'Add New Book to Inventory'}
             </Typography>
             <Typography variant="caption" sx={{ color: BORROW_COLORS.textSecondary }}>
-              Synchronized automatically with Firebase Firestore for Borrow Mobile App.
+              Every book record requires a mandatory cover image before saving to catalog.
             </Typography>
           </Box>
         </Box>
@@ -180,21 +193,34 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
       <DialogContent sx={{ p: { xs: 2, sm: 4, md: 6 } }}>
         <Box component="form" onSubmit={handleSubmit(handleFormSubmit)} noValidate>
           <Grid container spacing={3.5}>
-            {/* Left Column: Image Upload & Key Properties */}
+            {/* Left Column: Mandatory Image Upload & Copies */}
             <Grid item xs={12} lg={4}>
               <Box
                 sx={{
                   backgroundColor: BORROW_COLORS.surface,
                   p: 3,
-                  borderRadius: '20px',
+                  borderRadius: '12px',
                   border: `1px solid ${BORROW_COLORS.border}`,
                   boxShadow: BORROW_COLORS.cardShadow,
                 }}
               >
+                {/* Mandatory Image Upload Section */}
                 <BookImageUploader
-                  currentImageUrl={initialData?.coverUrl}
+                  currentImageUrl={coverImageUrl}
                   onFileSelect={(file) => setSelectedCoverFile(file)}
+                  onUrlChange={(url) => setCoverImageUrl(url)}
+                  onRemove={() => {
+                    setSelectedCoverFile(null);
+                    setCoverImageUrl('');
+                  }}
                 />
+
+                {/* Missing Image Warning Alert */}
+                {!hasCoverImage && (
+                  <Alert severity="warning" sx={{ mt: 2, borderRadius: '8px', fontSize: '0.8125rem' }}>
+                    <strong>Cover Image Required:</strong> Upload or paste a cover image to enable book saving.
+                  </Alert>
+                )}
 
                 <Box sx={{ mt: 3 }}>
                   <Typography variant="subtitle2" sx={{ mb: 0.8, fontWeight: 700, color: BORROW_COLORS.textPrimary }}>
@@ -227,13 +253,13 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
               </Box>
             </Grid>
 
-            {/* Right Column: Complete Book Fields */}
+            {/* Right Column: Book Catalog Metadata Fields */}
             <Grid item xs={12} lg={8}>
               <Box
                 sx={{
                   backgroundColor: BORROW_COLORS.surface,
                   p: { xs: 3, sm: 4 },
-                  borderRadius: '20px',
+                  borderRadius: '12px',
                   border: `1px solid ${BORROW_COLORS.border}`,
                   boxShadow: BORROW_COLORS.cardShadow,
                 }}
@@ -370,7 +396,13 @@ export const BookForm = ({ open, onClose, onSubmit, initialData = null, isEditin
                   <CustomButton variant="outlined" onClick={onClose} disabled={submitting}>
                     Cancel
                   </CustomButton>
-                  <CustomButton type="submit" variant="contained" loading={submitting} sx={{ px: 4 }}>
+                  <CustomButton
+                    type="submit"
+                    variant="contained"
+                    loading={submitting}
+                    disabled={!hasCoverImage || submitting}
+                    sx={{ px: 4 }}
+                  >
                     {isEditing ? 'Update Book Record' : 'Save Book to Catalog'}
                   </CustomButton>
                 </Box>
