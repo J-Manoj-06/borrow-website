@@ -14,9 +14,8 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { REQUEST_STATUSES } from '../../models/borrowRequestModel';
-import { COPY_STATUSES } from '../../models/bookModel';
+import { COPY_STATUSES, BOOK_STATUSES } from '../../models/bookModel';
 import { logActivityRecord } from './activityService';
-import { syncBookCopyCounts } from './bookService';
 import addDays from 'date-fns/addDays';
 import addHours from 'date-fns/addHours';
 
@@ -196,7 +195,16 @@ export const createBorrowRequest = async (requestData) => {
 };
 
 /**
-  Approve Borrow Request with Physical Copy Reservation inside an Atomic Firestore Transaction
+  Approve Borrow Request with Physical Copy Reservation inside an Atomic Firestore Transaction.
+
+  Read order (ALL reads before ANY write):
+    1. Read request doc
+    2. Query all copies for this book (getDocs — finds the available copy to reserve)
+    3. Read parent book doc (for isArchived flag used in count computation)
+  Write order:
+    4. Update reserved copy status
+    5. Update borrow request
+    6. Update parent book inventory counts
  */
 export const approveBorrowRequestTransaction = async (requestId, durationDays = 14, adminName = 'Lead Librarian') => {
   const now = new Date();
@@ -205,11 +213,14 @@ export const approveBorrowRequestTransaction = async (requestId, durationDays = 
 
   let targetStudentId = null;
   let targetBookTitle = null;
-  let reservedCopyId = null;
+  let reservedCopyId  = null;
 
   await runTransaction(db, async (transaction) => {
+    // ── PHASE 1: ALL READS ──────────────────────────────────────────────
+
+    // 1. Read request doc
     const requestRef = doc(db, REQUESTS_COLLECTION, requestId);
-    const reqSnap = await transaction.get(requestRef);
+    const reqSnap    = await transaction.get(requestRef);
 
     if (!reqSnap.exists()) {
       throw new Error(`Borrow Request ${requestId} not found.`);
@@ -223,50 +234,106 @@ export const approveBorrowRequestTransaction = async (requestId, durationDays = 
       throw new Error(`Request ${requestId} is no longer Pending.`);
     }
 
-    // Query Available physical copy for bookId
-    const copiesQuery = query(
-      collection(db, COPIES_COLLECTION),
-      where('bookId', '==', reqData.bookId),
-      where('status', '==', COPY_STATUSES.AVAILABLE)
-    );
-    const copiesSnap = await getDocs(copiesQuery);
+    // 2. Query ALL copies for this book (read all so we can compute counts without a post-write read)
+    const allCopiesQuery = query(collection(db, COPIES_COLLECTION), where('bookId', '==', reqData.bookId));
+    const allCopiesSnap  = await getDocs(allCopiesQuery);
 
-    if (copiesSnap.empty) {
+    // Pick the first available copy
+    const availableCopyDoc = allCopiesSnap.docs.find((d) => d.data().status === COPY_STATUSES.AVAILABLE);
+    if (!availableCopyDoc) {
       throw new Error(`No available physical copy on shelf for "${reqData.bookTitle}".`);
     }
+    reservedCopyId  = availableCopyDoc.id;
+    const copyRef   = availableCopyDoc.ref;
 
-    const targetCopyDoc = copiesSnap.docs[0];
-    reservedCopyId = targetCopyDoc.id;
-    const copyRef = targetCopyDoc.ref;
+    // 3. Read parent book doc for isArchived flag
+    const bookRef  = doc(db, BOOKS_COLLECTION, reqData.bookId);
+    const bookSnap = await transaction.get(bookRef);
 
-    // 1. Reserve Physical Copy
-    transaction.update(copyRef, {
-      status: COPY_STATUSES.RESERVED,
-      currentBorrowerId: reqData.studentId,
-      updatedAt: serverTimestamp(),
+    // ── PHASE 2: COMPUTE INVENTORY COUNTS ──────────────────────────────
+
+    let availableCopies   = 0;
+    let borrowedCopies    = 0;
+    let reservedCopies    = 0;
+    let damagedCopies     = 0;
+    let lostCopies        = 0;
+    let archivedCopies    = 0;
+    let maintenanceCopies = 0;
+    let totalCopies       = 0;
+
+    allCopiesSnap.docs.forEach((d) => {
+      const c = d.data();
+      // Apply the pending write: the chosen copy will become RESERVED
+      const effectiveStatus = (d.id === reservedCopyId) ? COPY_STATUSES.RESERVED : c.status;
+
+      if (effectiveStatus === COPY_STATUSES.ARCHIVED) {
+        archivedCopies += 1;
+      } else {
+        totalCopies += 1;
+        if (effectiveStatus === COPY_STATUSES.AVAILABLE)   availableCopies   += 1;
+        if (effectiveStatus === COPY_STATUSES.BORROWED)    borrowedCopies    += 1;
+        if (effectiveStatus === COPY_STATUSES.RESERVED)    reservedCopies    += 1;
+        if (effectiveStatus === COPY_STATUSES.DAMAGED)     damagedCopies     += 1;
+        if (effectiveStatus === COPY_STATUSES.LOST)        lostCopies        += 1;
+        if (effectiveStatus === COPY_STATUSES.MAINTENANCE) maintenanceCopies += 1;
+      }
     });
 
-    // 2. Update Borrow Request Record
+    const isArchived = bookSnap.exists() ? Boolean(bookSnap.data().isArchived) : false;
+    let bookStatus = BOOK_STATUSES.AVAILABLE;
+    if (isArchived) {
+      bookStatus = BOOK_STATUSES.ARCHIVED;
+    } else if (availableCopies > 0) {
+      bookStatus = BOOK_STATUSES.AVAILABLE;
+    } else if (borrowedCopies > 0 || reservedCopies > 0) {
+      bookStatus = BOOK_STATUSES.OUT_OF_STOCK;
+    } else {
+      bookStatus = BOOK_STATUSES.UNAVAILABLE;
+    }
+
+    // ── PHASE 3: ALL WRITES ─────────────────────────────────────────────
+
+    // 4. Reserve physical copy
+    transaction.update(copyRef, {
+      status:            COPY_STATUSES.RESERVED,
+      currentBorrowerId: reqData.studentId,
+      updatedAt:         serverTimestamp(),
+    });
+
+    // 5. Update borrow request record
     const approvalHistoryEvent = {
-      event: `Request Approved & Physical Copy ${reservedCopyId} Reserved (Expires in ${RESERVATION_EXPIRATION_HOURS}h)`,
+      event:     `Request Approved & Physical Copy ${reservedCopyId} Reserved (Expires in ${RESERVATION_EXPIRATION_HOURS}h)`,
       timestamp: now.toISOString(),
-      actor: adminName,
+      actor:     adminName,
     };
 
     transaction.update(requestRef, {
-      status: REQUEST_STATUSES.APPROVED,
-      approvedDate: now.toISOString(),
+      status:               REQUEST_STATUSES.APPROVED,
+      approvedDate:         now.toISOString(),
       reservedCopyId,
-      reservedAt: now.toISOString(),
+      reservedAt:           now.toISOString(),
       reservationExpiresAt,
-      dueDate: computedDueDate,
-      approvedBy: adminName,
-      history: [...(reqData.history || []), approvalHistoryEvent],
-      updatedAt: serverTimestamp(),
+      dueDate:              computedDueDate,
+      approvedBy:           adminName,
+      history:              [...(reqData.history || []), approvalHistoryEvent],
+      updatedAt:            serverTimestamp(),
     });
 
-    // 3. Recalculate parent book inventory counts atomically
-    await syncBookCopyCounts(transaction, reqData.bookId);
+    // 6. Update parent book inventory counts (no new reads needed)
+    if (bookSnap.exists()) {
+      transaction.update(bookRef, {
+        totalCopies,
+        availableCopies,
+        borrowedCopies,
+        reservedCopies,
+        damagedCopies,
+        lostCopies,
+        archivedCopies,
+        maintenanceCopies,
+        status:    bookStatus,
+        updatedAt: serverTimestamp(),
+      });
+    }
   });
 
   // Notify student & record activity
@@ -345,47 +412,139 @@ export const rejectBorrowRequestTransaction = async (requestId, reason, adminNam
 };
 
 /**
-  Check for Expired Reservations and Restore Physical Copies to Available
+  Check for Expired Reservations and Restore Physical Copies to Available.
+
+  Read order (ALL reads before ANY write) per reservation:
+    1. Read copy doc (to verify it is still Reserved)
+    2. Read all book copies + book doc for inventory count computation
+  Write order:
+    3. Update request status to Expired
+    4. Update copy status back to Available
+    5. Update parent book inventory counts
  */
 export const checkAndExpireReservations = async () => {
   const now = new Date();
 
   try {
-    const q = query(collection(db, REQUESTS_COLLECTION), where('status', '==', REQUEST_STATUSES.APPROVED));
+    const q        = query(collection(db, REQUESTS_COLLECTION), where('status', '==', REQUEST_STATUSES.APPROVED));
     const snapshot = await getDocs(q);
 
     for (const docSnap of snapshot.docs) {
       const req = docSnap.data();
       if (req.reservationExpiresAt && new Date(req.reservationExpiresAt) < now) {
+
         await runTransaction(db, async (transaction) => {
           const reqRef = docSnap.ref;
-          transaction.update(reqRef, {
-            status: REQUEST_STATUSES.EXPIRED,
-            updatedAt: serverTimestamp(),
-          });
 
+          // ── PHASE 1: ALL READS ────────────────────────────────────────
+
+          // 1. Read copy doc
+          let copyRef  = null;
+          let copySnap = null;
           if (req.reservedCopyId) {
-            const copyRef = doc(db, COPIES_COLLECTION, req.reservedCopyId);
-            const copySnap = await transaction.get(copyRef);
-            if (copySnap.exists() && copySnap.data().status === COPY_STATUSES.RESERVED) {
-              transaction.update(copyRef, {
-                status: COPY_STATUSES.AVAILABLE,
-                currentBorrowerId: null,
-                updatedAt: serverTimestamp(),
-              });
+            copyRef  = doc(db, COPIES_COLLECTION, req.reservedCopyId);
+            copySnap = await transaction.get(copyRef);
+          }
+
+          // 2. Read all copies + book doc for inventory count
+          let allCopiesSnap = null;
+          let bookRef       = null;
+          let bookSnap      = null;
+          if (req.bookId) {
+            const allCopiesQuery = query(collection(db, COPIES_COLLECTION), where('bookId', '==', req.bookId));
+            allCopiesSnap = await getDocs(allCopiesQuery);
+            bookRef  = doc(db, BOOKS_COLLECTION, req.bookId);
+            bookSnap = await transaction.get(bookRef);
+          }
+
+          // ── PHASE 2: COMPUTE COUNTS ────────────────────────────────────
+
+          const willRestoreCopy =
+            copySnap && copySnap.exists() && copySnap.data().status === COPY_STATUSES.RESERVED;
+
+          let availableCopies   = 0;
+          let borrowedCopies    = 0;
+          let reservedCopies    = 0;
+          let damagedCopies     = 0;
+          let lostCopies        = 0;
+          let archivedCopies    = 0;
+          let maintenanceCopies = 0;
+          let totalCopies       = 0;
+          let bookStatus        = BOOK_STATUSES.AVAILABLE;
+
+          if (allCopiesSnap) {
+            allCopiesSnap.docs.forEach((d) => {
+              const c = d.data();
+              // Apply pending write: restored copy will become AVAILABLE
+              const effectiveStatus =
+                (willRestoreCopy && copyRef && d.id === copyRef.id)
+                  ? COPY_STATUSES.AVAILABLE
+                  : c.status;
+
+              if (effectiveStatus === COPY_STATUSES.ARCHIVED) {
+                archivedCopies += 1;
+              } else {
+                totalCopies += 1;
+                if (effectiveStatus === COPY_STATUSES.AVAILABLE)   availableCopies   += 1;
+                if (effectiveStatus === COPY_STATUSES.BORROWED)    borrowedCopies    += 1;
+                if (effectiveStatus === COPY_STATUSES.RESERVED)    reservedCopies    += 1;
+                if (effectiveStatus === COPY_STATUSES.DAMAGED)     damagedCopies     += 1;
+                if (effectiveStatus === COPY_STATUSES.LOST)        lostCopies        += 1;
+                if (effectiveStatus === COPY_STATUSES.MAINTENANCE) maintenanceCopies += 1;
+              }
+            });
+
+            const isArchived = bookSnap && bookSnap.exists() ? Boolean(bookSnap.data().isArchived) : false;
+            if (isArchived) {
+              bookStatus = BOOK_STATUSES.ARCHIVED;
+            } else if (availableCopies > 0) {
+              bookStatus = BOOK_STATUSES.AVAILABLE;
+            } else if (borrowedCopies > 0 || reservedCopies > 0) {
+              bookStatus = BOOK_STATUSES.OUT_OF_STOCK;
+            } else {
+              bookStatus = BOOK_STATUSES.UNAVAILABLE;
             }
           }
 
-          if (req.bookId) {
-            await syncBookCopyCounts(transaction, req.bookId);
+          // ── PHASE 3: ALL WRITES ────────────────────────────────────────
+
+          // 3. Expire the request
+          transaction.update(reqRef, {
+            status:    REQUEST_STATUSES.EXPIRED,
+            updatedAt: serverTimestamp(),
+          });
+
+          // 4. Restore copy to Available
+          if (willRestoreCopy && copyRef) {
+            transaction.update(copyRef, {
+              status:            COPY_STATUSES.AVAILABLE,
+              currentBorrowerId: null,
+              updatedAt:         serverTimestamp(),
+            });
+          }
+
+          // 5. Update parent book inventory counts
+          if (bookRef && bookSnap && bookSnap.exists()) {
+            transaction.update(bookRef, {
+              totalCopies,
+              availableCopies,
+              borrowedCopies,
+              reservedCopies,
+              damagedCopies,
+              lostCopies,
+              archivedCopies,
+              maintenanceCopies,
+              status:    bookStatus,
+              updatedAt: serverTimestamp(),
+            });
           }
         });
 
         await logActivityRecord({
-          user: 'System Cron',
+          user:   'System Cron',
           action: `expired reservation for request ${req.requestId}`,
           target: req.bookTitle || req.requestId,
-          type: 'request',
+          type:   'request',
         });
       }
     }
